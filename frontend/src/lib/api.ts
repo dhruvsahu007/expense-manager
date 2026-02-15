@@ -1,10 +1,10 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class ApiClient {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = `${API_URL}/api`;
+    this.baseUrl = API_URL ? `${API_URL}/api` : '/api';
   }
 
   private getToken(): string | null {
