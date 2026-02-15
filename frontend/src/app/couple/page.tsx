@@ -54,6 +54,16 @@ export default function CouplePage() {
   const [contributeGoalId, setContributeGoalId] = useState<number | null>(null);
   const [contributeAmount, setContributeAmount] = useState('');
 
+  // Shared expense edit state
+  const [editingExpId, setEditingExpId] = useState<number | null>(null);
+  const [editExpAmount, setEditExpAmount] = useState('');
+  const [editExpCategory, setEditExpCategory] = useState('');
+  const [editExpDesc, setEditExpDesc] = useState('');
+  const [editExpSplitType, setEditExpSplitType] = useState('equal');
+  const [editExpMyShare, setEditExpMyShare] = useState('');
+  const [editExpPartnerShare, setEditExpPartnerShare] = useState('');
+  const [editExpDate, setEditExpDate] = useState('');
+
   const loadData = async () => {
     try {
       const coupleData = await api.getCoupleStatus();
@@ -180,6 +190,46 @@ export default function CouplePage() {
       toast.success('Expense deleted');
       loadData();
     } catch { toast.error('Failed to delete'); }
+  };
+
+  const handleEditSharedExpense = (exp: SharedExpense) => {
+    setEditingExpId(exp.id);
+    setEditExpAmount(exp.amount.toString());
+    setEditExpCategory(exp.category);
+    setEditExpDesc(exp.description || '');
+    setEditExpDate(exp.date);
+    setEditExpSplitType(exp.split_type);
+    if (exp.split_type === 'custom') {
+      const parts = exp.split_ratio.split(':');
+      const isUser1 = user?.id === couple?.user_1_id;
+      setEditExpMyShare(isUser1 ? parts[0] : parts[1]);
+      setEditExpPartnerShare(isUser1 ? parts[1] : parts[0]);
+    } else {
+      setEditExpMyShare('');
+      setEditExpPartnerShare('');
+    }
+  };
+
+  const handleSaveEditSharedExpense = async () => {
+    if (!editingExpId) return;
+    try {
+      const ratio = editExpSplitType === 'custom'
+        ? `${editExpMyShare}:${editExpPartnerShare}`
+        : '50:50';
+      await api.updateSharedExpense(editingExpId, {
+        amount: parseFloat(editExpAmount),
+        category: editExpCategory,
+        description: editExpDesc || undefined,
+        split_type: editExpSplitType,
+        split_ratio: ratio,
+        date: editExpDate,
+      });
+      toast.success('Shared expense updated!');
+      setEditingExpId(null);
+      loadData();
+    } catch {
+      toast.error('Failed to update expense');
+    }
   };
 
   // Helper: who owes whom
@@ -453,28 +503,99 @@ export default function CouplePage() {
             ) : (
               <div className="space-y-2">
                 {sharedExpenses.map((exp) => (
-                  <div key={exp.id} className="bg-white rounded-xl px-4 py-3 shadow-sm flex items-center justify-between group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{CATEGORY_ICONS[exp.category] || '📦'}</span>
-                      <div>
-                        <p className="font-medium text-slate-800">{exp.description || exp.category}</p>
-                        <p className="text-xs text-slate-400">
-                          Paid by {exp.paid_by_name} · {exp.split_type === 'equal' ? '50/50' : (() => {
-                            const parts = exp.split_ratio.split(':');
-                            const isUser1 = user?.id === couple.user_1_id;
-                            const myShare = isUser1 ? parts[0] : parts[1];
-                            const partnerShare = isUser1 ? parts[1] : parts[0];
-                            return `You: ₹${myShare}, ${couple.partner_name}: ₹${partnerShare}`;
-                          })()} · {formatDate(exp.date)}
-                        </p>
+                  <div key={exp.id} className="bg-white rounded-xl px-4 py-3 shadow-sm animate-fade-in group">
+                    {editingExpId === exp.id ? (
+                      /* ─── Inline Edit Mode ─── */
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Amount (₹)</label>
+                            <input type="number" value={editExpAmount} onChange={(e) => setEditExpAmount(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="Amount" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                            <select value={editExpCategory} onChange={(e) => setEditExpCategory(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none">
+                              {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                            <input type="date" value={editExpDate} onChange={(e) => setEditExpDate(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
+                            <input type="text" value={editExpDesc} onChange={(e) => setEditExpDesc(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="Optional" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">Split Type</label>
+                          <select value={editExpSplitType}
+                            onChange={(e) => { setEditExpSplitType(e.target.value); if (e.target.value === 'equal') { setEditExpMyShare(''); setEditExpPartnerShare(''); } }}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none">
+                            <option value="equal">Split Equally (50/50)</option>
+                            <option value="custom">Custom Split</option>
+                          </select>
+                        </div>
+                        {editExpSplitType === 'custom' && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 mb-1">{user?.name || 'You'} pays (₹)</label>
+                              <input type="number" value={editExpMyShare}
+                                onChange={(e) => { setEditExpMyShare(e.target.value); if (editExpAmount && e.target.value) setEditExpPartnerShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 mb-1">{couple?.partner_name || 'Partner'} pays (₹)</label>
+                              <input type="number" value={editExpPartnerShare}
+                                onChange={(e) => { setEditExpPartnerShare(e.target.value); if (editExpAmount && e.target.value) setEditExpMyShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveEditSharedExpense} className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700">
+                            Save
+                          </button>
+                          <button onClick={() => setEditingExpId(null)} className="px-4 py-2 rounded-lg border text-sm text-slate-500">
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-800">{formatCurrency(exp.amount)}</span>
-                      <button onClick={() => handleDeleteSharedExpense(exp.id)}
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 md:opacity-100"
-                        title="Delete expense">✕</button>
-                    </div>
+                    ) : (
+                      /* ─── Display Mode ─── */
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{CATEGORY_ICONS[exp.category] || '📦'}</span>
+                          <div>
+                            <p className="font-medium text-slate-800">{exp.description || exp.category}</p>
+                            <p className="text-xs text-slate-400">
+                              Paid by {exp.paid_by_name} · {exp.split_type === 'equal' ? '50/50' : (() => {
+                                const parts = exp.split_ratio.split(':');
+                                const isUser1 = user?.id === couple.user_1_id;
+                                const myShare = isUser1 ? parts[0] : parts[1];
+                                const partnerShare = isUser1 ? parts[1] : parts[0];
+                                return `You: ₹${myShare}, ${couple.partner_name}: ₹${partnerShare}`;
+                              })()} · {formatDate(exp.date)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-800">{formatCurrency(exp.amount)}</span>
+                          <button onClick={() => handleEditSharedExpense(exp)}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition opacity-0 group-hover:opacity-100 md:opacity-100"
+                            title="Edit expense">✏️</button>
+                          <button onClick={() => handleDeleteSharedExpense(exp.id)}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 md:opacity-100"
+                            title="Delete expense">🗑️</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

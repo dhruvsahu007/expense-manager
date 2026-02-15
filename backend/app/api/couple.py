@@ -13,6 +13,7 @@ from app.schemas.couple import (
     CoupleInvite,
     CoupleResponse,
     SharedExpenseCreate,
+    SharedExpenseUpdate,
     SharedExpenseResponse,
     BalanceSummary,
     SavingsGoalCreate,
@@ -325,6 +326,60 @@ def list_shared_expenses(
             )
         )
     return result
+
+
+@router.put("/expenses/{expense_id}", response_model=SharedExpenseResponse)
+def update_shared_expense(
+    expense_id: int,
+    expense_data: SharedExpenseUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a shared expense."""
+    couple = get_active_couple(current_user.id, db)
+    expense = (
+        db.query(SharedExpense)
+        .filter(
+            and_(
+                SharedExpense.id == expense_id,
+                SharedExpense.couple_id == couple.id,
+            )
+        )
+        .first()
+    )
+    if not expense:
+        raise HTTPException(status_code=404, detail="Shared expense not found")
+
+    if expense_data.amount is not None:
+        expense.amount = expense_data.amount
+    if expense_data.category is not None:
+        expense.category = expense_data.category
+    if expense_data.description is not None:
+        expense.description = expense_data.description
+    if expense_data.split_type is not None:
+        expense.split_type = expense_data.split_type
+    if expense_data.split_ratio is not None:
+        expense.split_ratio = expense_data.split_ratio
+    if expense_data.date is not None:
+        expense.date = expense_data.date
+
+    db.commit()
+    db.refresh(expense)
+
+    payer = db.query(User).filter(User.id == expense.paid_by_user_id).first()
+    return SharedExpenseResponse(
+        id=expense.id,
+        couple_id=expense.couple_id,
+        paid_by_user_id=expense.paid_by_user_id,
+        paid_by_name=payer.name if payer else None,
+        amount=expense.amount,
+        category=expense.category,
+        description=expense.description,
+        split_type=expense.split_type,
+        split_ratio=expense.split_ratio,
+        date=expense.date,
+        created_at=expense.created_at,
+    )
 
 
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

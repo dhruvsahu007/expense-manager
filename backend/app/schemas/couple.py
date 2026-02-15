@@ -32,6 +32,15 @@ class SharedExpenseCreate(BaseModel):
     date: date
 
 
+class SharedExpenseUpdate(BaseModel):
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    split_type: Optional[str] = None
+    split_ratio: Optional[str] = None
+    date: Optional[date] = None
+
+
 class SharedExpenseResponse(BaseModel):
     id: int
     couple_id: int

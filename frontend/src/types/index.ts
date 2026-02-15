@@ -121,6 +121,15 @@ export interface SharedExpenseCreate {
   date: string;
 }
 
+export interface SharedExpenseUpdate {
+  amount?: number;
+  category?: string;
+  description?: string;
+  split_type?: string;
+  split_ratio?: string;
+  date?: string;
+}
+
 export interface BalanceSummary {
   total_shared: number;
   user_1_paid: number;

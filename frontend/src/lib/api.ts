@@ -201,6 +201,13 @@ class ApiClient {
     return this.request<import('@/types').SharedExpense[]>('/couple/expenses');
   }
 
+  async updateSharedExpense(id: number, data: import('@/types').SharedExpenseUpdate) {
+    return this.request<import('@/types').SharedExpense>(`/couple/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteSharedExpense(id: number) {
     return this.request<null>(`/couple/expenses/${id}`, { method: 'DELETE' });
   }
