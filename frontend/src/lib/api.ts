@@ -149,6 +149,10 @@ class ApiClient {
     return this.request<import('@/types').SharedExpense[]>('/couple/expenses');
   }
 
+  async deleteSharedExpense(id: number) {
+    return this.request<null>(`/couple/expenses/${id}`, { method: 'DELETE' });
+  }
+
   async getBalance() {
     return this.request<import('@/types').BalanceSummary>('/couple/balance');
   }

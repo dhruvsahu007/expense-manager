@@ -325,6 +325,31 @@ def list_shared_expenses(
     return result
 
 
+@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_shared_expense(
+    expense_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a shared expense (only by the person who created it or either partner)."""
+    couple = get_active_couple(current_user.id, db)
+    expense = (
+        db.query(SharedExpense)
+        .filter(
+            and_(
+                SharedExpense.id == expense_id,
+                SharedExpense.couple_id == couple.id,
+            )
+        )
+        .first()
+    )
+    if not expense:
+        raise HTTPException(status_code=404, detail="Shared expense not found")
+
+    db.delete(expense)
+    db.commit()
+
+
 @router.get("/balance", response_model=BalanceSummary)
 def get_balance(
     current_user: User = Depends(get_current_user),
