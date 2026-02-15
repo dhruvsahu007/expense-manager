@@ -1,0 +1,223 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+class ApiClient {
+  private baseUrl: string;
+
+  constructor() {
+    this.baseUrl = `${API_URL}/api`;
+  }
+
+  private getToken(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token');
+    }
+    return null;
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return null as T;
+    }
+
+    return response.json();
+  }
+
+  // ─── Auth ────────────────────────────────────────────────────────────────
+
+  async signup(data: { name: string; email: string; password: string; monthly_income?: number; salary_date?: number }) {
+    return this.request<import('@/types').User>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async login(email: string, password: string) {
+    return this.request<import('@/types').Token>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async getMe() {
+    return this.request<import('@/types').User>('/auth/me');
+  }
+
+  async updateMe(data: import('@/types').UserUpdate) {
+    return this.request<import('@/types').User>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ─── Expenses ────────────────────────────────────────────────────────────
+
+  async getCategories() {
+    return this.request<string[]>('/expenses/categories');
+  }
+
+  async createExpense(data: import('@/types').ExpenseCreate) {
+    return this.request<import('@/types').Expense>('/expenses/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getExpenses(params?: {
+    category?: string;
+    expense_type?: string;
+    start_date?: string;
+    end_date?: string;
+    skip?: number;
+    limit?: number;
+  }) {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return this.request<import('@/types').Expense[]>(`/expenses/${query ? `?${query}` : ''}`);
+  }
+
+  async deleteExpense(id: number) {
+    return this.request<null>(`/expenses/${id}`, { method: 'DELETE' });
+  }
+
+  // ─── Couple ──────────────────────────────────────────────────────────────
+
+  async invitePartner(email: string) {
+    return this.request<import('@/types').Couple>('/couple/invite', {
+      method: 'POST',
+      body: JSON.stringify({ partner_email: email }),
+    });
+  }
+
+  async acceptInvite(coupleId: number) {
+    return this.request<import('@/types').Couple>(`/couple/accept/${coupleId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getCoupleStatus() {
+    return this.request<import('@/types').Couple>('/couple/status');
+  }
+
+  async getPendingInvites() {
+    return this.request<import('@/types').Couple[]>('/couple/pending-invites');
+  }
+
+  async createSharedExpense(data: import('@/types').SharedExpenseCreate) {
+    return this.request<import('@/types').SharedExpense>('/couple/expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSharedExpenses() {
+    return this.request<import('@/types').SharedExpense[]>('/couple/expenses');
+  }
+
+  async getBalance() {
+    return this.request<import('@/types').BalanceSummary>('/couple/balance');
+  }
+
+  // ─── Savings Goals ───────────────────────────────────────────────────────
+
+  async createSavingsGoal(data: import('@/types').SavingsGoalCreate) {
+    return this.request<import('@/types').SavingsGoal>('/couple/goals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSavingsGoals() {
+    return this.request<import('@/types').SavingsGoal[]>('/couple/goals');
+  }
+
+  async contributeToGoal(goalId: number, amount: number) {
+    return this.request<import('@/types').SavingsContribution>(
+      `/couple/goals/${goalId}/contribute`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      }
+    );
+  }
+
+  async getContributions(goalId: number) {
+    return this.request<import('@/types').SavingsContribution[]>(
+      `/couple/goals/${goalId}/contributions`
+    );
+  }
+
+  // ─── Budgets ─────────────────────────────────────────────────────────────
+
+  async createBudget(data: import('@/types').BudgetCreate) {
+    return this.request<import('@/types').Budget>('/budgets/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getBudgets() {
+    return this.request<import('@/types').Budget[]>('/budgets/');
+  }
+
+  async deleteBudget(id: number) {
+    return this.request<null>(`/budgets/${id}`, { method: 'DELETE' });
+  }
+
+  // ─── Dashboard ───────────────────────────────────────────────────────────
+
+  async getIndividualDashboard() {
+    return this.request<import('@/types').IndividualDashboard>('/dashboard/individual');
+  }
+
+  async getCoupleDashboard() {
+    return this.request<import('@/types').CoupleDashboard>('/dashboard/couple');
+  }
+
+  // ─── Notifications ───────────────────────────────────────────────────────
+
+  async getNotifications() {
+    return this.request<import('@/types').Notification[]>('/dashboard/notifications');
+  }
+
+  async markNotificationRead(id: number) {
+    return this.request<{ status: string }>(`/dashboard/notifications/${id}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async getUnreadCount() {
+    return this.request<{ unread_count: number }>('/dashboard/notifications/unread-count');
+  }
+}
+
+export const api = new ApiClient();
