@@ -10,6 +10,12 @@
   --background-end-rgb: 241, 245, 249;
 }
 
+.dark {
+  --foreground-rgb: 226, 232, 240;
+  --background-start-rgb: 15, 23, 42;
+  --background-end-rgb: 30, 41, 59;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -18,6 +24,112 @@ body {
     rgb(var(--background-end-rgb))
   );
   min-height: 100vh;
+}
+
+/* Dark mode overrides for common elements */
+.dark input,
+.dark select,
+.dark textarea {
+  color: #e2e8f0;
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+.dark input:disabled,
+.dark select:disabled {
+  background-color: #0f172a;
+  color: #64748b;
+}
+
+/* Dark mode: cards & panels */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+/* Dark mode: text colors */
+.dark .text-slate-800 {
+  color: #e2e8f0 !important;
+}
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+.dark .text-slate-500 {
+  color: #64748b !important;
+}
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Dark mode: borders */
+.dark .border-slate-200 {
+  border-color: #334155 !important;
+}
+.dark .border-slate-100 {
+  border-color: #1e293b !important;
+}
+.dark .border {
+  border-color: #334155;
+}
+
+/* Dark mode: background tints */
+.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+/* Dark mode: stat cards & colored backgrounds */
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15) !important; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.15) !important; }
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.15) !important; }
+.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.15) !important; }
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.15) !important; }
+.dark .bg-mint-50 { background-color: rgba(16, 185, 129, 0.15) !important; }
+
+/* Dark mode: hover states */
+.dark .hover\:bg-slate-50:hover {
+  background-color: #334155 !important;
+}
+.dark .hover\:bg-red-50:hover {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+.dark .hover\:bg-blue-50:hover {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+.dark .hover\:bg-mint-50:hover {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Dark mode: shadows */
+.dark .shadow-sm {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+.dark .shadow-lg {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Dark mode: recharts tooltip */
+.dark .recharts-default-tooltip {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* Dark mode: scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* Custom scrollbar */

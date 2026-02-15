@@ -2,12 +2,16 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.deps import get_current_user
 from app.core.config import get_settings
 from app.models.user import User
+from app.models.expense import Expense, RecurringExpense
+from app.models.budget import Budget, Notification
+from app.models.couple import Couple, SharedExpense, Settlement, SavingsGoal, SavingsContribution
 from app.schemas.user import UserCreate, UserLogin, UserUpdate, UserResponse, Token
 
 settings = get_settings()
@@ -80,3 +84,47 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete user account and all associated data (GDPR)."""
+    user_id = current_user.id
+
+    # Delete notifications
+    db.query(Notification).filter(Notification.user_id == user_id).delete()
+
+    # Delete budgets
+    db.query(Budget).filter(Budget.user_id == user_id).delete()
+
+    # Delete expenses & recurring expenses
+    db.query(Expense).filter(Expense.user_id == user_id).delete()
+    db.query(RecurringExpense).filter(RecurringExpense.user_id == user_id).delete()
+
+    # Delete couple-related data
+    couples = db.query(Couple).filter(
+        or_(Couple.user_1_id == user_id, Couple.user_2_id == user_id)
+    ).all()
+
+    for couple in couples:
+        # Delete savings contributions for this couple's goals
+        goals = db.query(SavingsGoal).filter(SavingsGoal.couple_id == couple.id).all()
+        for goal in goals:
+            db.query(SavingsContribution).filter(SavingsContribution.goal_id == goal.id).delete()
+        db.query(SavingsGoal).filter(SavingsGoal.couple_id == couple.id).delete()
+
+        # Delete settlements
+        db.query(Settlement).filter(Settlement.couple_id == couple.id).delete()
+
+        # Delete shared expenses
+        db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id).delete()
+
+        # Delete the couple record
+        db.delete(couple)
+
+    # Delete the user
+    db.delete(current_user)
+    db.commit()

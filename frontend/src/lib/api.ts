@@ -72,6 +72,10 @@ class ApiClient {
     });
   }
 
+  async deleteAccount() {
+    return this.request<null>('/auth/me', { method: 'DELETE' });
+  }
+
   // ─── Expenses ────────────────────────────────────────────────────────────
 
   async getCategories() {
