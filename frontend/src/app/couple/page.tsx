@@ -31,6 +31,8 @@ export default function CouplePage() {
   const [seDesc, setSeDesc] = useState('');
   const [seSplitType, setSeSplitType] = useState('equal');
   const [seSplitRatio, setSeSplitRatio] = useState('50:50');
+  const [seMyShare, setSeMyShare] = useState('');
+  const [sePartnerShare, setSePartnerShare] = useState('');
   const [seDate, setSeDate] = useState(new Date().toISOString().split('T')[0]);
   const [seSubmitting, setSeSubmitting] = useState(false);
 
@@ -104,16 +106,20 @@ export default function CouplePage() {
     e.preventDefault();
     setSeSubmitting(true);
     try {
+      const ratio = seSplitType === 'custom' ? `${seMyShare}:${sePartnerShare}` : '50:50';
       await api.createSharedExpense({
         amount: parseFloat(seAmount),
         category: seCategory,
         description: seDesc || undefined,
         split_type: seSplitType,
-        split_ratio: seSplitRatio,
+        split_ratio: ratio,
         date: seDate,
       });
       setSeAmount('');
       setSeDesc('');
+      setSeMyShare('');
+      setSePartnerShare('');
+      setSeSplitType('equal');
       setShowExpenseForm(false);
       loadData();
     } catch {} finally { setSeSubmitting(false); }
@@ -367,30 +373,90 @@ export default function CouplePage() {
                       <select
                         value={seSplitType}
                         onChange={(e) => {
-                          setSeSplitType(e.target.value);
-                          if (e.target.value === 'equal') setSeSplitRatio('50:50');
+                          const type = e.target.value;
+                          setSeSplitType(type);
+                          if (type === 'equal') {
+                            const half = seAmount ? (parseFloat(seAmount) / 2).toFixed(0) : '';
+                            setSeMyShare(half);
+                            setSePartnerShare(half);
+                          } else {
+                            setSeMyShare('');
+                            setSePartnerShare('');
+                          }
                         }}
                         className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none"
                       >
-                        <option value="equal">50/50</option>
-                        <option value="percentage">Percentage</option>
-                        <option value="custom">Custom Amount</option>
+                        <option value="equal">Split Equally</option>
+                        <option value="custom">Custom Split</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Split Ratio {seSplitType === 'percentage' ? '(You:Partner %)' : seSplitType === 'custom' ? '(You:Partner ₹)' : ''}
-                      </label>
-                      <input
-                        type="text"
-                        value={seSplitRatio}
-                        onChange={(e) => setSeSplitRatio(e.target.value)}
-                        disabled={seSplitType === 'equal'}
-                        className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none disabled:bg-slate-50"
-                        placeholder="50:50"
-                      />
-                    </div>
+                    {seSplitType === 'equal' ? (
+                      <div className="flex items-end">
+                        <p className="text-sm text-slate-500 pb-3">
+                          Each person pays {seAmount ? formatCurrency(parseFloat(seAmount) / 2) : '₹0'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div></div>
+                    )}
                   </div>
+
+                  {seSplitType === 'custom' && (
+                    <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                      <p className="text-sm font-medium text-slate-600">How much does each person owe?</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">
+                            {user?.name || 'You'} pays (₹)
+                          </label>
+                          <input
+                            type="number"
+                            value={seMyShare}
+                            onChange={(e) => {
+                              const myVal = e.target.value;
+                              setSeMyShare(myVal);
+                              if (seAmount && myVal) {
+                                const remainder = Math.max(0, parseFloat(seAmount) - parseFloat(myVal));
+                                setSePartnerShare(remainder.toFixed(0));
+                              }
+                            }}
+                            required min="0"
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">
+                            {couple?.partner_name || 'Partner'} pays (₹)
+                          </label>
+                          <input
+                            type="number"
+                            value={sePartnerShare}
+                            onChange={(e) => {
+                              const partnerVal = e.target.value;
+                              setSePartnerShare(partnerVal);
+                              if (seAmount && partnerVal) {
+                                const remainder = Math.max(0, parseFloat(seAmount) - parseFloat(partnerVal));
+                                setSeMyShare(remainder.toFixed(0));
+                              }
+                            }}
+                            required min="0"
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      {seAmount && seMyShare && sePartnerShare && (
+                        Math.abs(parseFloat(seMyShare) + parseFloat(sePartnerShare) - parseFloat(seAmount)) > 0.01 ? (
+                          <p className="text-xs text-red-500">
+                            ⚠️ Shares add up to {formatCurrency(parseFloat(seMyShare) + parseFloat(sePartnerShare))} but total is {formatCurrency(parseFloat(seAmount))}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-mint-600">✓ Split adds up correctly</p>
+                        )
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
@@ -438,7 +504,13 @@ export default function CouplePage() {
                       <div>
                         <p className="font-medium text-slate-800">{exp.category}</p>
                         <p className="text-xs text-slate-400">
-                          Paid by {exp.paid_by_name} · {exp.split_type} ({exp.split_ratio}) · {formatDate(exp.date)}
+                          Paid by {exp.paid_by_name} · {exp.split_type === 'equal' ? '50/50' : (() => {
+                            const parts = exp.split_ratio.split(':');
+                            const isUser1 = user?.id === couple.user_1_id;
+                            const myShare = isUser1 ? parts[0] : parts[1];
+                            const partnerShare = isUser1 ? parts[1] : parts[0];
+                            return `${user?.name}: ₹${myShare}, ${couple.partner_name}: ₹${partnerShare}`;
+                          })()} · {formatDate(exp.date)}
                         </p>
                       </div>
                     </div>
