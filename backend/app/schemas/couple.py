@@ -16,6 +16,7 @@ class CoupleResponse(BaseModel):
     created_at: datetime
     partner_name: Optional[str] = None
     partner_email: Optional[str] = None
+    role: Optional[str] = None  # "inviter" or "invitee"
 
     class Config:
         from_attributes = True

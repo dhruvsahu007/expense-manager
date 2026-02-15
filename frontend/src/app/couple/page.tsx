@@ -91,6 +91,15 @@ export default function CouplePage() {
     } catch {}
   };
 
+  const handleDecline = async (coupleId: number) => {
+    try {
+      await api.declineInvite(coupleId);
+      setCouple(null);
+      setPendingInvites([]);
+      loadData();
+    } catch {}
+  };
+
   const handleSharedExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     setSeSubmitting(true);
@@ -148,6 +157,9 @@ export default function CouplePage() {
 
   // No couple — show invite UI
   if (!couple || couple.status === 'pending') {
+    const isInvitee = couple?.status === 'pending' && couple?.role === 'invitee';
+    const isInviter = couple?.status === 'pending' && couple?.role === 'inviter';
+
     return (
       <AppLayout>
         <div className="max-w-lg mx-auto space-y-6 pb-20 md:pb-6">
@@ -158,8 +170,36 @@ export default function CouplePage() {
             </p>
           </div>
 
-          {/* Pending invites I received */}
-          {pendingInvites.length > 0 && (
+          {/* Pending invites I received (from /couple/status with role=invitee) */}
+          {isInvitee && couple && (
+            <div className="bg-amber-50 rounded-xl p-5">
+              <h3 className="font-semibold text-amber-800 mb-3">💌 You have an invite!</h3>
+              <div className="flex items-center justify-between bg-white rounded-lg p-4">
+                <div>
+                  <p className="font-medium text-slate-800">{couple.partner_name}</p>
+                  <p className="text-sm text-slate-500">{couple.partner_email}</p>
+                  <p className="text-xs text-slate-400 mt-1">wants to track expenses together</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAccept(couple.id)}
+                    className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700 transition"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => handleDecline(couple.id)}
+                    className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pending invites from /pending-invites endpoint (fallback) */}
+          {!isInvitee && pendingInvites.length > 0 && (
             <div className="bg-amber-50 rounded-xl p-5">
               <h3 className="font-semibold text-amber-800 mb-3">Pending Invites</h3>
               {pendingInvites.map((inv) => (
@@ -168,19 +208,27 @@ export default function CouplePage() {
                     <p className="font-medium text-slate-800">{inv.partner_name}</p>
                     <p className="text-sm text-slate-500">{inv.partner_email}</p>
                   </div>
-                  <button
-                    onClick={() => handleAccept(inv.id)}
-                    className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700"
-                  >
-                    Accept
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAccept(inv.id)}
+                      className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleDecline(inv.id)}
+                      className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition"
+                    >
+                      Decline
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Sent invite pending */}
-          {couple && couple.status === 'pending' && (
+          {/* Sent invite pending (only for the inviter) */}
+          {isInviter && couple && (
             <div className="bg-blue-50 rounded-xl p-5 text-center">
               <p className="text-blue-700 font-medium">
                 ⏳ Invite sent to {couple.partner_name || couple.partner_email}
@@ -189,8 +237,8 @@ export default function CouplePage() {
             </div>
           )}
 
-          {/* Send invite */}
-          {!couple && (
+          {/* Send invite (only when no couple exists at all) */}
+          {!couple && pendingInvites.length === 0 && (
             <div className="bg-white rounded-xl p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-800 mb-4">Invite Partner</h3>
               {inviteError && (

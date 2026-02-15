@@ -152,6 +152,32 @@ def accept_invite(
     )
 
 
+@router.post("/decline/{couple_id}")
+def decline_invite(
+    couple_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Decline a pending couple invite."""
+    couple = (
+        db.query(Couple)
+        .filter(
+            and_(
+                Couple.id == couple_id,
+                Couple.user_2_id == current_user.id,
+                Couple.status == "pending",
+            )
+        )
+        .first()
+    )
+    if not couple:
+        raise HTTPException(status_code=404, detail="Pending invite not found")
+
+    couple.status = "declined"
+    db.commit()
+    return {"detail": "Invite declined"}
+
+
 @router.get("/status", response_model=CoupleResponse)
 def couple_status(
     current_user: User = Depends(get_current_user),
@@ -177,6 +203,8 @@ def couple_status(
     partner_id = get_partner_id(couple, current_user.id)
     partner = db.query(User).filter(User.id == partner_id).first()
 
+    role = "inviter" if couple.user_1_id == current_user.id else "invitee"
+
     return CoupleResponse(
         id=couple.id,
         user_1_id=couple.user_1_id,
@@ -185,6 +213,7 @@ def couple_status(
         created_at=couple.created_at,
         partner_name=partner.name if partner else None,
         partner_email=partner.email if partner else None,
+        role=role,
     )
 
 

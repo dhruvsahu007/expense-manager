@@ -62,6 +62,7 @@ export interface Couple {
   created_at: string;
   partner_name?: string;
   partner_email?: string;
+  role?: string; // "inviter" or "invitee"
 }
 
 export interface SharedExpense {

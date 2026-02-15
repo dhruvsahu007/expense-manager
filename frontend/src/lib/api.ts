@@ -124,6 +124,12 @@ class ApiClient {
     });
   }
 
+  async declineInvite(coupleId: number) {
+    return this.request<{ detail: string }>(`/couple/decline/${coupleId}`, {
+      method: 'POST',
+    });
+  }
+
   async getCoupleStatus() {
     return this.request<import('@/types').Couple>('/couple/status');
   }
