@@ -21,7 +21,14 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "http://localhost:3000",
+        "https://polarsquares.com",
+        "https://www.polarsquares.com",
+        "http://polarsquares.com",
+        "http://www.polarsquares.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
