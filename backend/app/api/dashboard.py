@@ -9,13 +9,14 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.expense import Expense
-from app.models.couple import Couple, SharedExpense, SavingsGoal
+from app.models.couple import Couple, SharedExpense, SavingsGoal, Settlement
 from app.models.budget import Budget, Notification
 from app.schemas.dashboard import (
     IndividualDashboard,
     CoupleDashboard,
     CategoryBreakdown,
     MonthlyTrend,
+    BudgetOverview,
     NotificationResponse,
 )
 
@@ -42,6 +43,29 @@ def individual_dashboard(
         )
         .scalar()
     )
+
+    # Previous month expenses
+    prev_month = today.month - 1
+    prev_year = today.year
+    if prev_month <= 0:
+        prev_month = 12
+        prev_year -= 1
+
+    prev_month_expenses = (
+        db.query(func.coalesce(func.sum(Expense.amount), 0))
+        .filter(
+            and_(
+                Expense.user_id == current_user.id,
+                extract("month", Expense.date) == prev_month,
+                extract("year", Expense.date) == prev_year,
+            )
+        )
+        .scalar()
+    )
+
+    mom_change = 0.0
+    if prev_month_expenses > 0:
+        mom_change = ((month_expenses - prev_month_expenses) / prev_month_expenses) * 100
 
     total_income = current_user.monthly_income
     savings_amount = total_income - month_expenses
@@ -95,6 +119,36 @@ def individual_dashboard(
         month_label = date(y, m, 1).strftime("%b %Y")
         monthly_trend.append(MonthlyTrend(month=month_label, total=round(total, 2)))
 
+    # Budget overview
+    budgets = db.query(Budget).filter(Budget.user_id == current_user.id).all()
+    budget_overview = []
+    for b in budgets:
+        cat_spend = (
+            db.query(func.coalesce(func.sum(Expense.amount), 0))
+            .filter(
+                and_(
+                    Expense.user_id == current_user.id,
+                    Expense.category == b.category,
+                    extract("month", Expense.date) == today.month,
+                    extract("year", Expense.date) == today.year,
+                )
+            )
+            .scalar()
+        )
+        pct = (cat_spend / b.monthly_limit * 100) if b.monthly_limit > 0 else 0
+        status_str = "ok"
+        if pct >= 100:
+            status_str = "over"
+        elif pct >= 80:
+            status_str = "warning"
+        budget_overview.append(BudgetOverview(
+            category=b.category,
+            monthly_limit=b.monthly_limit,
+            current_spend=round(cat_spend, 2),
+            percent_used=round(pct, 1),
+            status=status_str,
+        ))
+
     # Generate nudges
     _check_and_generate_nudges(current_user, month_expenses, db)
 
@@ -106,6 +160,9 @@ def individual_dashboard(
         burn_rate=round(burn_rate, 2),
         category_breakdown=category_breakdown,
         monthly_trend=monthly_trend,
+        budget_overview=budget_overview,
+        previous_month_expenses=round(prev_month_expenses, 2),
+        month_over_month_change=round(mom_change, 1),
     )
 
 
@@ -150,6 +207,17 @@ def couple_dashboard(
     # Net balance calculation
     net = u1_paid - u2_paid  # positive = user1 paid more
 
+    # Settlement totals
+    settlements = db.query(Settlement).filter(Settlement.couple_id == couple.id).all()
+    settlements_total = sum(s.amount for s in settlements)
+    settlement_adjustment = 0.0
+    for s in settlements:
+        if s.paid_by_user_id == couple.user_1_id:
+            settlement_adjustment -= s.amount
+        else:
+            settlement_adjustment += s.amount
+    net_after = net + settlement_adjustment
+
     # Category breakdown
     cat_totals = {}
     for e in expenses:
@@ -173,6 +241,9 @@ def couple_dashboard(
             "percent": round(pct, 1),
         })
 
+    user1 = db.query(User).filter(User.id == couple.user_1_id).first()
+    user2 = db.query(User).filter(User.id == couple.user_2_id).first()
+
     return CoupleDashboard(
         shared_expenses_total=round(shared_total, 2),
         user_1_paid=round(u1_paid, 2),
@@ -180,6 +251,10 @@ def couple_dashboard(
         net_balance=round(net, 2),
         category_breakdown=cat_breakdown,
         goal_progress=goal_progress,
+        user_1_name=user1.name if user1 else None,
+        user_2_name=user2.name if user2 else None,
+        settlements_total=round(settlements_total, 2),
+        net_after_settlements=round(net_after, 2),
     )
 
 
@@ -221,6 +296,22 @@ def mark_notification_read(
         raise HTTPException(status_code=404, detail="Notification not found")
 
     notification.is_read = 1
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/notifications/mark-all-read")
+def mark_all_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark all notifications as read."""
+    db.query(Notification).filter(
+        and_(
+            Notification.user_id == current_user.id,
+            Notification.is_read == 0,
+        )
+    ).update({Notification.is_read: 1})
     db.commit()
     return {"status": "ok"}
 

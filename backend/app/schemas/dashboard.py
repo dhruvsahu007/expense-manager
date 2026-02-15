@@ -21,6 +21,7 @@ class BudgetResponse(BaseModel):
     current_spend: Optional[float] = None
     remaining: Optional[float] = None
     percent_used: Optional[float] = None
+    status: Optional[str] = None  # "ok", "warning", "over"
     created_at: datetime
 
     class Config:
@@ -39,6 +40,14 @@ class MonthlyTrend(BaseModel):
     total: float
 
 
+class BudgetOverview(BaseModel):
+    category: str
+    monthly_limit: float
+    current_spend: float
+    percent_used: float
+    status: str  # "ok", "warning", "over"
+
+
 class IndividualDashboard(BaseModel):
     total_income: float
     total_expenses: float
@@ -47,6 +56,9 @@ class IndividualDashboard(BaseModel):
     burn_rate: float  # daily average
     category_breakdown: List[CategoryBreakdown]
     monthly_trend: List[MonthlyTrend]
+    budget_overview: List[BudgetOverview] = []
+    previous_month_expenses: float = 0.0
+    month_over_month_change: float = 0.0  # percentage change
 
 
 class CoupleDashboard(BaseModel):
@@ -56,6 +68,10 @@ class CoupleDashboard(BaseModel):
     net_balance: float
     category_breakdown: List[CategoryBreakdown]
     goal_progress: List[dict]
+    user_1_name: Optional[str] = None
+    user_2_name: Optional[str] = None
+    settlements_total: float = 0.0
+    net_after_settlements: float = 0.0
 
 
 # --- Notification ---

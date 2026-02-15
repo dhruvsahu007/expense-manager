@@ -3,8 +3,8 @@
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { user, refreshUser, logout } = useAuth();
@@ -13,7 +13,7 @@ export default function SettingsPage() {
   const [salaryDate, setSalaryDate] = useState(user?.salary_date?.toString() || '1');
   const [budget, setBudget] = useState(user?.monthly_budget?.toString() || '');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,9 +26,24 @@ export default function SettingsPage() {
         monthly_budget: budget ? parseFloat(budget) : undefined,
       });
       await refreshUser();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch {} finally { setSaving(false); }
+      toast.success('Settings saved!');
+    } catch { toast.error('Failed to save'); } finally { setSaving(false); }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const blob = await api.exportExpenses();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `splitmint-expenses-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Expenses exported!');
+    } catch { toast.error('Export failed'); } finally { setExporting(false); }
   };
 
   return (
@@ -87,11 +102,25 @@ export default function SettingsPage() {
               type="submit" disabled={saving}
               className="w-full bg-mint-600 text-white py-3 rounded-lg font-medium hover:bg-mint-700 transition disabled:opacity-50"
             >
-              {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save Changes'}
+              {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
         </div>
 
+        {/* Data Export */}
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-800 mb-2">📥 Data Export</h2>
+          <p className="text-sm text-slate-500 mb-4">Download all your expenses as a CSV file for your records or analysis.</p>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="w-full border border-mint-200 text-mint-600 py-3 rounded-lg font-medium hover:bg-mint-50 transition disabled:opacity-50"
+          >
+            {exporting ? 'Exporting...' : '📄 Export All Expenses (CSV)'}
+          </button>
+        </div>
+
+        {/* Account */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-800 mb-2">Account</h2>
           <p className="text-sm text-slate-500 mb-4">Member since {user ? new Date(user.created_at).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : ''}</p>

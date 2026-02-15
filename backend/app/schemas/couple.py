@@ -53,9 +53,34 @@ class BalanceSummary(BaseModel):
     total_shared: float
     user_1_paid: float
     user_2_paid: float
-    user_1_owes: float  # positive means user_1 owes user_2
+    user_1_owes: float
     user_2_owes: float
-    net_balance: float  # positive = user_1 owes user_2
+    net_balance: float
+    settlements_total: float = 0.0
+    net_after_settlements: float = 0.0
+    user_1_name: Optional[str] = None
+    user_2_name: Optional[str] = None
+
+
+# --- Settlement ---
+class SettlementCreate(BaseModel):
+    amount: float
+    note: Optional[str] = None
+
+
+class SettlementResponse(BaseModel):
+    id: int
+    couple_id: int
+    paid_by_user_id: int
+    paid_to_user_id: int
+    paid_by_name: Optional[str] = None
+    paid_to_name: Optional[str] = None
+    amount: float
+    note: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # --- Savings Goal ---

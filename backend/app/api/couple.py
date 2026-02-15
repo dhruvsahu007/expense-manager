@@ -8,7 +8,7 @@ from sqlalchemy import or_, and_, func
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.models.couple import Couple, SharedExpense, SavingsGoal, SavingsContribution
+from app.models.couple import Couple, SharedExpense, SavingsGoal, SavingsContribution, Settlement
 from app.schemas.couple import (
     CoupleInvite,
     CoupleResponse,
@@ -19,6 +19,8 @@ from app.schemas.couple import (
     SavingsGoalResponse,
     SavingsContributionCreate,
     SavingsContributionResponse,
+    SettlementCreate,
+    SettlementResponse,
 )
 
 router = APIRouter(prefix="/couple", tags=["Couple Mode"])
@@ -381,6 +383,22 @@ def get_balance(
 
     net = user1_owes_total - user2_owes_total  # positive means user1 owes user2
 
+    # Calculate settlements
+    settlements = db.query(Settlement).filter(Settlement.couple_id == couple.id).all()
+    settlements_total = sum(s.amount for s in settlements)
+    # Settlements reduce the net: if user1 settled (paid user2), net decreases
+    settlement_adjustment = 0.0
+    for s in settlements:
+        if s.paid_by_user_id == couple.user_1_id:
+            settlement_adjustment -= s.amount  # user1 paid, so net decreases
+        else:
+            settlement_adjustment += s.amount  # user2 paid, so net increases
+
+    net_after = net + settlement_adjustment
+
+    user1 = db.query(User).filter(User.id == couple.user_1_id).first()
+    user2 = db.query(User).filter(User.id == couple.user_2_id).first()
+
     return BalanceSummary(
         total_shared=user1_paid + user2_paid,
         user_1_paid=user1_paid,
@@ -388,7 +406,82 @@ def get_balance(
         user_1_owes=user1_owes_total,
         user_2_owes=user2_owes_total,
         net_balance=net,
+        settlements_total=settlements_total,
+        net_after_settlements=net_after,
+        user_1_name=user1.name if user1 else None,
+        user_2_name=user2.name if user2 else None,
     )
+
+
+# ─── Settlements ─────────────────────────────────────────────────────────────
+
+@router.post("/settle", response_model=SettlementResponse, status_code=status.HTTP_201_CREATED)
+def create_settlement(
+    data: SettlementCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Record a settlement payment."""
+    couple = get_active_couple(current_user.id, db)
+    partner_id = get_partner_id(couple, current_user.id)
+
+    settlement = Settlement(
+        couple_id=couple.id,
+        paid_by_user_id=current_user.id,
+        paid_to_user_id=partner_id,
+        amount=data.amount,
+        note=data.note,
+    )
+    db.add(settlement)
+    db.commit()
+    db.refresh(settlement)
+
+    partner = db.query(User).filter(User.id == partner_id).first()
+    return SettlementResponse(
+        id=settlement.id,
+        couple_id=settlement.couple_id,
+        paid_by_user_id=settlement.paid_by_user_id,
+        paid_to_user_id=settlement.paid_to_user_id,
+        paid_by_name=current_user.name,
+        paid_to_name=partner.name if partner else None,
+        amount=settlement.amount,
+        note=settlement.note,
+        created_at=settlement.created_at,
+    )
+
+
+@router.get("/settlements", response_model=List[SettlementResponse])
+def list_settlements(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all settlements for the couple."""
+    couple = get_active_couple(current_user.id, db)
+    settlements = (
+        db.query(Settlement)
+        .filter(Settlement.couple_id == couple.id)
+        .order_by(Settlement.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for s in settlements:
+        payer = db.query(User).filter(User.id == s.paid_by_user_id).first()
+        payee = db.query(User).filter(User.id == s.paid_to_user_id).first()
+        result.append(
+            SettlementResponse(
+                id=s.id,
+                couple_id=s.couple_id,
+                paid_by_user_id=s.paid_by_user_id,
+                paid_to_user_id=s.paid_to_user_id,
+                paid_by_name=payer.name if payer else None,
+                paid_to_name=payee.name if payee else None,
+                amount=s.amount,
+                note=s.note,
+                created_at=s.created_at,
+            )
+        )
+    return result
 
 
 # ─── Savings Goals ───────────────────────────────────────────────────────────

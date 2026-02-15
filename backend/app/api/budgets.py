@@ -126,5 +126,6 @@ def _enrich_budget(budget: Budget, user_id: int, db: Session) -> BudgetResponse:
         current_spend=round(current_spend, 2),
         remaining=round(remaining, 2),
         percent_used=round(percent_used, 1),
+        status="over" if percent_used >= 100 else "warning" if percent_used >= 80 else "ok",
         created_at=budget.created_at,
     )

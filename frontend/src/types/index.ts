@@ -41,6 +41,8 @@ export interface Expense {
   expense_type: string;
   date: string;
   description: string | null;
+  is_recurring?: boolean;
+  recurring_id?: number | null;
   created_at: string;
 }
 
@@ -50,6 +52,37 @@ export interface ExpenseCreate {
   expense_type: string;
   date: string;
   description?: string;
+}
+
+export interface ExpenseUpdate {
+  amount?: number;
+  category?: string;
+  expense_type?: string;
+  date?: string;
+  description?: string;
+}
+
+// ─── Recurring Expense ───────────────────────────────────────────────────────
+
+export interface RecurringExpense {
+  id: number;
+  user_id: number;
+  amount: number;
+  category: string;
+  description: string | null;
+  frequency: string;
+  day_of_month: number;
+  is_active: boolean;
+  next_date: string | null;
+  created_at: string;
+}
+
+export interface RecurringExpenseCreate {
+  amount: number;
+  category: string;
+  description?: string;
+  frequency: string;
+  day_of_month: number;
 }
 
 // ─── Couple ──────────────────────────────────────────────────────────────────
@@ -95,6 +128,29 @@ export interface BalanceSummary {
   user_1_owes: number;
   user_2_owes: number;
   net_balance: number;
+  settlements_total: number;
+  net_after_settlements: number;
+  user_1_name?: string;
+  user_2_name?: string;
+}
+
+// ─── Settlement ──────────────────────────────────────────────────────────────
+
+export interface Settlement {
+  id: number;
+  couple_id: number;
+  paid_by_user_id: number;
+  paid_to_user_id: number;
+  paid_by_name?: string;
+  paid_to_name?: string;
+  amount: number;
+  note: string | null;
+  created_at: string;
+}
+
+export interface SettlementCreate {
+  amount: number;
+  note?: string;
 }
 
 // ─── Savings ─────────────────────────────────────────────────────────────────
@@ -137,6 +193,7 @@ export interface Budget {
   current_spend?: number;
   remaining?: number;
   percent_used?: number;
+  status?: string; // "ok", "warning", "over"
   created_at: string;
 }
 
@@ -158,6 +215,14 @@ export interface MonthlyTrend {
   total: number;
 }
 
+export interface BudgetOverview {
+  category: string;
+  monthly_limit: number;
+  current_spend: number;
+  percent_used: number;
+  status: string;
+}
+
 export interface IndividualDashboard {
   total_income: number;
   total_expenses: number;
@@ -166,6 +231,9 @@ export interface IndividualDashboard {
   burn_rate: number;
   category_breakdown: CategoryBreakdown[];
   monthly_trend: MonthlyTrend[];
+  budget_overview: BudgetOverview[];
+  previous_month_expenses: number;
+  month_over_month_change: number;
 }
 
 export interface CoupleDashboard {
@@ -181,6 +249,10 @@ export interface CoupleDashboard {
     current: number;
     percent: number;
   }[];
+  user_1_name?: string;
+  user_2_name?: string;
+  settlements_total: number;
+  net_after_settlements: number;
 }
 
 // ─── Notification ────────────────────────────────────────────────────────────

@@ -90,6 +90,9 @@ class ApiClient {
     expense_type?: string;
     start_date?: string;
     end_date?: string;
+    search?: string;
+    min_amount?: number;
+    max_amount?: number;
     skip?: number;
     limit?: number;
   }) {
@@ -105,8 +108,53 @@ class ApiClient {
     return this.request<import('@/types').Expense[]>(`/expenses/${query ? `?${query}` : ''}`);
   }
 
+  async updateExpense(id: number, data: import('@/types').ExpenseUpdate) {
+    return this.request<import('@/types').Expense>(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteExpense(id: number) {
     return this.request<null>(`/expenses/${id}`, { method: 'DELETE' });
+  }
+
+  async exportExpenses(params?: { start_date?: string; end_date?: string }) {
+    const token = this.getToken();
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) searchParams.append(key, String(value));
+      });
+    }
+    const query = searchParams.toString();
+    const response = await fetch(`${this.baseUrl}/expenses/export${query ? `?${query}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.blob();
+  }
+
+  // ─── Recurring Expenses ──────────────────────────────────────────────────
+
+  async createRecurringExpense(data: import('@/types').RecurringExpenseCreate) {
+    return this.request<import('@/types').RecurringExpense>('/expenses/recurring', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getRecurringExpenses() {
+    return this.request<import('@/types').RecurringExpense[]>('/expenses/recurring/list');
+  }
+
+  async deleteRecurringExpense(id: number) {
+    return this.request<null>(`/expenses/recurring/${id}`, { method: 'DELETE' });
+  }
+
+  async toggleRecurringExpense(id: number) {
+    return this.request<import('@/types').RecurringExpense>(`/expenses/recurring/${id}/toggle`, {
+      method: 'POST',
+    });
   }
 
   // ─── Couple ──────────────────────────────────────────────────────────────
@@ -157,6 +205,19 @@ class ApiClient {
     return this.request<import('@/types').BalanceSummary>('/couple/balance');
   }
 
+  // ─── Settlements ─────────────────────────────────────────────────────────
+
+  async createSettlement(data: import('@/types').SettlementCreate) {
+    return this.request<import('@/types').Settlement>('/couple/settle', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSettlements() {
+    return this.request<import('@/types').Settlement[]>('/couple/settlements');
+  }
+
   // ─── Savings Goals ───────────────────────────────────────────────────────
 
   async createSavingsGoal(data: import('@/types').SavingsGoalCreate) {
@@ -199,6 +260,13 @@ class ApiClient {
     return this.request<import('@/types').Budget[]>('/budgets/');
   }
 
+  async updateBudget(id: number, data: { monthly_limit: number }) {
+    return this.request<import('@/types').Budget>(`/budgets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteBudget(id: number) {
     return this.request<null>(`/budgets/${id}`, { method: 'DELETE' });
   }
@@ -221,6 +289,12 @@ class ApiClient {
 
   async markNotificationRead(id: number) {
     return this.request<{ status: string }>(`/dashboard/notifications/${id}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsRead() {
+    return this.request<{ status: string }>('/dashboard/notifications/mark-all-read', {
       method: 'POST',
     });
   }

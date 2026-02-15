@@ -29,6 +29,18 @@ class SharedExpense(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class Settlement(Base):
+    __tablename__ = "settlements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    couple_id = Column(Integer, ForeignKey("couples.id"), nullable=False, index=True)
+    paid_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    paid_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class SavingsGoal(Base):
     __tablename__ = "savings_goals"
 

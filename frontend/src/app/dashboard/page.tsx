@@ -4,13 +4,13 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { IndividualDashboard } from '@/types';
+import { IndividualDashboard, BudgetOverview } from '@/types';
 import { useEffect, useState } from 'react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer,
 } from 'recharts';
-import { CATEGORY_COLORS } from '@/lib/utils';
+import { CATEGORY_COLORS, CATEGORY_ICONS } from '@/lib/utils';
 
 const COLORS = ['#f97316', '#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#6366f1', '#ef4444', '#14b8a6', '#22c55e', '#94a3b8'];
 
@@ -25,6 +25,8 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const momChange = data?.month_over_month_change;
 
   return (
     <AppLayout>
@@ -46,30 +48,18 @@ export default function DashboardPage() {
           <>
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard
-                label="Income"
-                value={formatCurrency(data.total_income)}
-                icon="💰"
-                color="bg-emerald-50 text-emerald-700"
+              <StatCard label="Income" value={formatCurrency(data.total_income)} icon="💰" color="bg-emerald-50 text-emerald-700" />
+              <StatCard label="Expenses" value={formatCurrency(data.total_expenses)} icon="💸" color="bg-red-50 text-red-600"
+                sub={momChange !== undefined && momChange !== null ? (
+                  <span className={`text-xs font-medium ${momChange > 0 ? 'text-red-500' : momChange < 0 ? 'text-green-500' : 'text-slate-400'}`}>
+                    {momChange > 0 ? '↑' : momChange < 0 ? '↓' : '→'} {Math.abs(momChange).toFixed(0)}% vs last month
+                  </span>
+                ) : undefined}
               />
-              <StatCard
-                label="Expenses"
-                value={formatCurrency(data.total_expenses)}
-                icon="💸"
-                color="bg-red-50 text-red-600"
-              />
-              <StatCard
-                label="Savings"
-                value={formatCurrency(data.savings_amount)}
-                icon="🏦"
-                color={data.savings_amount >= 0 ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}
-              />
-              <StatCard
-                label="Savings Rate"
-                value={`${data.savings_rate}%`}
-                icon="📈"
-                color={data.savings_rate >= 20 ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}
-              />
+              <StatCard label="Savings" value={formatCurrency(data.savings_amount)} icon="🏦"
+                color={data.savings_amount >= 0 ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'} />
+              <StatCard label="Savings Rate" value={`${data.savings_rate}%`} icon="📈"
+                color={data.savings_rate >= 20 ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'} />
             </div>
 
             {/* Burn Rate */}
@@ -93,6 +83,45 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
+
+            {/* Budget Overview */}
+            {data.budget_overview && data.budget_overview.length > 0 && (
+              <div className="bg-white rounded-xl p-5 shadow-sm">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Budget Overview</h3>
+                <div className="space-y-3">
+                  {data.budget_overview.map((b: BudgetOverview) => {
+                    const icon = CATEGORY_ICONS[b.category] || '📦';
+                    const isOver = b.status === 'over';
+                    const isWarning = b.status === 'warning';
+                    return (
+                      <div key={b.category} className="flex items-center gap-3">
+                        <span className="text-lg w-7 text-center">{icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between text-sm mb-1">
+                            <span className="font-medium text-slate-700 truncate">{b.category}</span>
+                            <div className="flex items-center gap-2">
+                              {isOver && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">Over!</span>}
+                              {isWarning && <span className="text-xs bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded">⚠️</span>}
+                              <span className="text-xs text-slate-400">
+                                {formatCurrency(b.current_spend)} / {formatCurrency(b.monthly_limit)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                isOver ? 'bg-red-500' : isWarning ? 'bg-amber-400' : 'bg-mint-500'
+                              }`}
+                              style={{ width: `${Math.min(b.percent_used, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Charts Row */}
             <div className="grid md:grid-cols-2 gap-6">
@@ -118,7 +147,10 @@ export default function DashboardPage() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Tooltip
+                        formatter={(value: number) => formatCurrency(value)}
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -136,7 +168,10 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Tooltip
+                      formatter={(value: number) => formatCurrency(value)}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                    />
                     <Bar dataKey="total" fill="#22c55e" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -154,7 +189,7 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function StatCard({ label, value, icon, color, sub }: { label: string; value: string; icon: string; color: string; sub?: React.ReactNode }) {
   return (
     <div className={`rounded-xl p-5 shadow-sm ${color} animate-slide-up`}>
       <div className="flex items-center justify-between">
@@ -162,6 +197,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
       </div>
       <p className="text-2xl font-bold mt-2">{value}</p>
       <p className="text-sm opacity-70 mt-1">{label}</p>
+      {sub && <div className="mt-1">{sub}</div>}
     </div>
   );
 }
