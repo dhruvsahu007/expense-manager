@@ -72,8 +72,11 @@ export interface RecurringExpense {
   description: string | null;
   frequency: string;
   day_of_month: number;
+  day_of_week: number | null;
   is_active: boolean;
   next_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
   created_at: string;
 }
 
@@ -83,6 +86,20 @@ export interface RecurringExpenseCreate {
   description?: string;
   frequency: string;
   day_of_month: number;
+  day_of_week?: number;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface RecurringExpenseUpdate {
+  amount?: number;
+  category?: string;
+  description?: string;
+  frequency?: string;
+  day_of_month?: number;
+  day_of_week?: number;
+  start_date?: string;
+  end_date?: string;
 }
 
 // ─── Couple ──────────────────────────────────────────────────────────────────
@@ -337,4 +354,37 @@ export interface JointAccountSummary {
   month_spent: number;
   recent_contributions: JointAccountContribution[];
   recent_transactions: JointAccountTransaction[];
+}
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+export interface ReportCategoryAmount {
+  category: string;
+  total: number;
+  percentage: number;
+}
+
+export interface MonthlyBreakdown {
+  month: string;
+  total: number;
+  categories: ReportCategoryAmount[];
+}
+
+export interface TrendPoint {
+  month: string;
+  total: number;
+}
+
+export interface BudgetVarianceItem {
+  category: string;
+  budget: number;
+  actual: number;
+  variance: number;
+  percent_used: number;
+}
+
+export interface ReportsData {
+  monthly_breakdown: MonthlyBreakdown[];
+  spending_trends: TrendPoint[];
+  budget_variance: BudgetVarianceItem[];
 }

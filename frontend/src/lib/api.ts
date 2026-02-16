@@ -161,6 +161,19 @@ class ApiClient {
     });
   }
 
+  async updateRecurringExpense(id: number, data: import('@/types').RecurringExpenseUpdate) {
+    return this.request<import('@/types').RecurringExpense>(`/expenses/recurring/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async processRecurringExpenses() {
+    return this.request<{ processed: number; message: string }>('/expenses/recurring/process', {
+      method: 'POST',
+    });
+  }
+
   // ─── Couple ──────────────────────────────────────────────────────────────
 
   async invitePartner(email: string) {
@@ -350,6 +363,12 @@ class ApiClient {
 
   async getUnreadCount() {
     return this.request<{ unread_count: number }>('/dashboard/notifications/unread-count');
+  }
+
+  // ─── Reports ─────────────────────────────────────────────────────────────
+
+  async getReports(months: number = 12) {
+    return this.request<import('@/types').ReportsData>(`/reports?months=${months}`);
   }
 }
 

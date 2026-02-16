@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/expenses', label: 'Expenses', icon: '💸' },
   { href: '/budgets', label: 'Budgets', icon: '🎯' },
+  { href: '/reports', label: 'Reports', icon: '📈' },
   { href: '/couple', label: 'Couple', icon: '👫' },
   { href: '/settings', label: 'Settings', icon: '⚙️' },
 ];

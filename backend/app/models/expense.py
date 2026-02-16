@@ -29,6 +29,9 @@ class RecurringExpense(Base):
     description = Column(Text, nullable=True)
     frequency = Column(String(20), nullable=False, default="monthly")  # monthly / weekly / yearly
     day_of_month = Column(Integer, default=1)  # 1-31 for monthly
+    day_of_week = Column(Integer, nullable=True)  # 0=Monday ... 6=Sunday (for weekly)
     is_active = Column(Boolean, default=True)
     next_date = Column(Date, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

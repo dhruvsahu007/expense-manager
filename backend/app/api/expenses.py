@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.expense import Expense, RecurringExpense
 from app.schemas.expense import (
     ExpenseCreate, ExpenseUpdate, ExpenseResponse,
-    RecurringExpenseCreate, RecurringExpenseResponse,
+    RecurringExpenseCreate, RecurringExpenseUpdate, RecurringExpenseResponse,
 )
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
@@ -206,6 +206,38 @@ def delete_expense(
 
 # ─── Recurring Expenses ──────────────────────────────────────────────────────
 
+
+def _compute_next_date(frequency: str, day_of_month: int = 1, day_of_week: int | None = None, after: date | None = None) -> date:
+    """Compute the next occurrence date for a recurring expense."""
+    ref = after or date.today()
+    if frequency == "weekly":
+        dow = day_of_week if day_of_week is not None else 0
+        days_ahead = (dow - ref.weekday()) % 7
+        if days_ahead == 0 and after:
+            days_ahead = 7
+        return ref + timedelta(days=days_ahead or 7)
+    elif frequency == "yearly":
+        try:
+            next_d = date(ref.year, ref.month, ref.day).replace(year=ref.year + 1)
+        except ValueError:
+            next_d = date(ref.year + 1, ref.month, 28)
+        return next_d
+    else:  # monthly
+        day = min(day_of_month, 28)
+        try:
+            next_d = date(ref.year, ref.month, day)
+        except ValueError:
+            next_d = date(ref.year, ref.month, 28)
+        if next_d <= ref:
+            m = ref.month + 1
+            y = ref.year
+            if m > 12:
+                m = 1
+                y += 1
+            next_d = date(y, m, day)
+        return next_d
+
+
 @router.post("/recurring", response_model=RecurringExpenseResponse, status_code=status.HTTP_201_CREATED)
 def create_recurring_expense(
     data: RecurringExpenseCreate,
@@ -213,21 +245,7 @@ def create_recurring_expense(
     db: Session = Depends(get_db),
 ):
     """Create a recurring expense template."""
-    today = date.today()
-    if data.frequency == "monthly":
-        day = min(data.day_of_month, 28)
-        next_d = date(today.year, today.month, day)
-        if next_d <= today:
-            m = today.month + 1
-            y = today.year
-            if m > 12:
-                m = 1
-                y += 1
-            next_d = date(y, m, day)
-    elif data.frequency == "weekly":
-        next_d = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
-    else:
-        next_d = date(today.year + 1, today.month, today.day)
+    next_d = _compute_next_date(data.frequency, data.day_of_month, data.day_of_week)
 
     rec = RecurringExpense(
         user_id=current_user.id,
@@ -236,7 +254,10 @@ def create_recurring_expense(
         description=data.description,
         frequency=data.frequency,
         day_of_month=data.day_of_month,
+        day_of_week=data.day_of_week,
         next_date=next_d,
+        start_date=data.start_date or date.today(),
+        end_date=data.end_date,
     )
     db.add(rec)
     db.commit()
@@ -256,6 +277,46 @@ def list_recurring_expenses(
         .order_by(RecurringExpense.created_at.desc())
         .all()
     )
+
+
+@router.put("/recurring/{recurring_id}", response_model=RecurringExpenseResponse)
+def update_recurring_expense(
+    recurring_id: int,
+    data: RecurringExpenseUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a recurring expense template."""
+    rec = (
+        db.query(RecurringExpense)
+        .filter(and_(RecurringExpense.id == recurring_id, RecurringExpense.user_id == current_user.id))
+        .first()
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recurring expense not found")
+
+    if data.amount is not None:
+        rec.amount = data.amount
+    if data.category is not None:
+        rec.category = data.category
+    if data.description is not None:
+        rec.description = data.description
+    if data.day_of_month is not None:
+        rec.day_of_month = data.day_of_month
+    if data.day_of_week is not None:
+        rec.day_of_week = data.day_of_week
+    if data.start_date is not None:
+        rec.start_date = data.start_date
+    if data.end_date is not None:
+        rec.end_date = data.end_date
+    if data.frequency is not None:
+        rec.frequency = data.frequency
+
+    # Recompute next date
+    rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week)
+    db.commit()
+    db.refresh(rec)
+    return rec
 
 
 @router.delete("/recurring/{recurring_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -291,6 +352,56 @@ def toggle_recurring_expense(
     if not rec:
         raise HTTPException(status_code=404, detail="Recurring expense not found")
     rec.is_active = not rec.is_active
+    if rec.is_active:
+        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week)
     db.commit()
     db.refresh(rec)
     return rec
+
+
+@router.post("/recurring/process")
+def process_recurring_expenses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Process (auto-create) all due recurring expenses for the current user."""
+    today = date.today()
+    recs = (
+        db.query(RecurringExpense)
+        .filter(
+            and_(
+                RecurringExpense.user_id == current_user.id,
+                RecurringExpense.is_active == True,
+                RecurringExpense.next_date <= today,
+            )
+        )
+        .all()
+    )
+
+    created = 0
+    for rec in recs:
+        # Check end_date
+        if rec.end_date and today > rec.end_date:
+            rec.is_active = False
+            db.commit()
+            continue
+
+        # Create expense for the due date
+        expense = Expense(
+            user_id=current_user.id,
+            amount=rec.amount,
+            category=rec.category,
+            expense_type="personal",
+            date=rec.next_date,
+            description=rec.description or f"Recurring: {rec.category}",
+            is_recurring=True,
+            recurring_id=rec.id,
+        )
+        db.add(expense)
+
+        # Advance next_date
+        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week, after=rec.next_date)
+        db.commit()
+        created += 1
+
+    return {"processed": created, "message": f"{created} recurring expenses created"}

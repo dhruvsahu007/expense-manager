@@ -51,6 +51,20 @@ class RecurringExpenseCreate(BaseModel):
     description: Optional[str] = None
     frequency: str = "monthly"  # monthly / weekly / yearly
     day_of_month: int = 1
+    day_of_week: Optional[int] = None  # 0=Monday ... 6=Sunday (for weekly)
+    start_date: Optional[Date] = None
+    end_date: Optional[Date] = None
+
+
+class RecurringExpenseUpdate(BaseModel):
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    frequency: Optional[str] = None
+    day_of_month: Optional[int] = None
+    day_of_week: Optional[int] = None
+    start_date: Optional[Date] = None
+    end_date: Optional[Date] = None
 
 
 class RecurringExpenseResponse(BaseModel):
@@ -61,8 +75,11 @@ class RecurringExpenseResponse(BaseModel):
     description: Optional[str]
     frequency: str
     day_of_month: int
+    day_of_week: Optional[int] = None
     is_active: bool
     next_date: Optional[Date]
+    start_date: Optional[Date] = None
+    end_date: Optional[Date] = None
     created_at: datetime
 
     class Config:
