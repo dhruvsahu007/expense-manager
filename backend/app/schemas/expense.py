@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as Date, datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -9,7 +9,7 @@ class ExpenseCreate(BaseModel):
     amount: float
     category: str
     expense_type: str = "personal"  # personal / shared
-    date: date
+    date: Date
     description: Optional[str] = None
 
 
@@ -17,7 +17,7 @@ class ExpenseUpdate(BaseModel):
     amount: Optional[float] = None
     category: Optional[str] = None
     expense_type: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[Date] = None
     description: Optional[str] = None
 
 
@@ -27,7 +27,7 @@ class ExpenseResponse(BaseModel):
     amount: float
     category: str
     expense_type: str
-    date: date
+    date: Date
     description: Optional[str]
     is_recurring: Optional[bool] = False
     recurring_id: Optional[int] = None
@@ -40,8 +40,8 @@ class ExpenseResponse(BaseModel):
 class ExpenseFilter(BaseModel):
     category: Optional[str] = None
     expense_type: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    start_date: Optional[Date] = None
+    end_date: Optional[Date] = None
 
 
 # --- Recurring Expenses ---
@@ -62,7 +62,7 @@ class RecurringExpenseResponse(BaseModel):
     frequency: str
     day_of_month: int
     is_active: bool
-    next_date: Optional[date]
+    next_date: Optional[Date]
     created_at: datetime
 
     class Config:

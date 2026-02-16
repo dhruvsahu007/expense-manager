@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as Date, datetime
 from typing import Optional
 from pydantic import BaseModel
 
@@ -31,7 +31,7 @@ class SharedExpenseCreate(BaseModel):
     description: Optional[str] = None
     split_type: str = "equal"  # equal / percentage / custom
     split_ratio: str = "50:50"
-    date: date
+    date: Date
 
 
 class SharedExpenseUpdate(BaseModel):
@@ -40,7 +40,7 @@ class SharedExpenseUpdate(BaseModel):
     description: Optional[str] = None
     split_type: Optional[str] = None
     split_ratio: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[Date] = None
 
 
 class SharedExpenseResponse(BaseModel):
@@ -53,7 +53,7 @@ class SharedExpenseResponse(BaseModel):
     description: Optional[str]
     split_type: str
     split_ratio: str
-    date: date
+    date: Date
     created_at: datetime
 
     class Config:
@@ -98,7 +98,7 @@ class SettlementResponse(BaseModel):
 class SavingsGoalCreate(BaseModel):
     title: str
     target_amount: float
-    deadline: Optional[date] = None
+    deadline: Optional[Date] = None
 
 
 class SavingsGoalResponse(BaseModel):
@@ -107,7 +107,7 @@ class SavingsGoalResponse(BaseModel):
     title: str
     target_amount: float
     current_amount: float
-    deadline: Optional[date]
+    deadline: Optional[Date]
     is_completed: int
     percent_complete: Optional[float] = None
     monthly_contribution_needed: Optional[float] = None
