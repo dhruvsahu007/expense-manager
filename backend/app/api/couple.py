@@ -3,12 +3,15 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, extract
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.models.couple import Couple, SharedExpense, SavingsGoal, SavingsContribution, Settlement
+from app.models.couple import (
+    Couple, SharedExpense, SavingsGoal, SavingsContribution, Settlement,
+    JointAccount, JointAccountContribution, JointAccountTransaction,
+)
 from app.schemas.couple import (
     CoupleInvite,
     CoupleResponse,
@@ -22,6 +25,12 @@ from app.schemas.couple import (
     SavingsContributionResponse,
     SettlementCreate,
     SettlementResponse,
+    JointAccountCreate,
+    JointAccountResponse,
+    JointAccountContributionCreate,
+    JointAccountContributionResponse,
+    JointAccountTransactionResponse,
+    JointAccountSummary,
 )
 
 router = APIRouter(prefix="/couple", tags=["Couple Mode"])
@@ -261,7 +270,7 @@ def create_shared_expense(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Log a shared expense."""
+    """Log a shared expense. Optionally deduct from joint account."""
     couple = get_active_couple(current_user.id, db)
 
     shared = SharedExpense(
@@ -273,8 +282,27 @@ def create_shared_expense(
         split_type=expense_data.split_type,
         split_ratio=expense_data.split_ratio,
         date=expense_data.date,
+        paid_from_joint=expense_data.paid_from_joint,
     )
     db.add(shared)
+    db.flush()  # get id before committing
+
+    # If paid from joint account, create a transaction
+    if expense_data.paid_from_joint:
+        joint = db.query(JointAccount).filter(
+            and_(JointAccount.couple_id == couple.id, JointAccount.is_active == True)
+        ).first()
+        if not joint:
+            raise HTTPException(status_code=400, detail="No active joint account found")
+        txn = JointAccountTransaction(
+            joint_account_id=joint.id,
+            shared_expense_id=shared.id,
+            amount=expense_data.amount,
+            description=f"{expense_data.category}: {expense_data.description or 'Shared expense'}",
+            date=expense_data.date,
+        )
+        db.add(txn)
+
     db.commit()
     db.refresh(shared)
 
@@ -289,6 +317,7 @@ def create_shared_expense(
         split_type=shared.split_type,
         split_ratio=shared.split_ratio,
         date=shared.date,
+        paid_from_joint=shared.paid_from_joint or False,
         created_at=shared.created_at,
     )
 
@@ -322,6 +351,7 @@ def list_shared_expenses(
                 split_type=exp.split_type,
                 split_ratio=exp.split_ratio,
                 date=exp.date,
+                paid_from_joint=exp.paid_from_joint or False,
                 created_at=exp.created_at,
             )
         )
@@ -378,6 +408,7 @@ def update_shared_expense(
         split_type=expense.split_type,
         split_ratio=expense.split_ratio,
         date=expense.date,
+        paid_from_joint=expense.paid_from_joint or False,
         created_at=expense.created_at,
     )
 
@@ -402,6 +433,11 @@ def delete_shared_expense(
     )
     if not expense:
         raise HTTPException(status_code=404, detail="Shared expense not found")
+
+    # Remove any related joint account transaction
+    db.query(JointAccountTransaction).filter(
+        JointAccountTransaction.shared_expense_id == expense_id
+    ).delete()
 
     db.delete(expense)
     db.commit()
@@ -537,6 +573,276 @@ def list_settlements(
             )
         )
     return result
+
+
+# ─── Joint Account ───────────────────────────────────────────────────────────
+
+def _get_joint_balance(joint_id: int, db: Session) -> tuple:
+    """Return (total_contributions, total_spent, balance)."""
+    total_contributions = db.query(func.coalesce(func.sum(JointAccountContribution.amount), 0.0)).filter(
+        JointAccountContribution.joint_account_id == joint_id
+    ).scalar()
+    total_spent = db.query(func.coalesce(func.sum(JointAccountTransaction.amount), 0.0)).filter(
+        JointAccountTransaction.joint_account_id == joint_id
+    ).scalar()
+    return float(total_contributions), float(total_spent), float(total_contributions) - float(total_spent)
+
+
+@router.post("/joint-account", response_model=JointAccountResponse, status_code=status.HTTP_201_CREATED)
+def create_joint_account(
+    data: JointAccountCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a joint account for the couple."""
+    couple = get_active_couple(current_user.id, db)
+    existing = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Joint account already exists for this couple")
+
+    joint = JointAccount(
+        couple_id=couple.id,
+        account_name=data.account_name,
+        is_active=True,
+    )
+    db.add(joint)
+    db.commit()
+    db.refresh(joint)
+
+    return JointAccountResponse(
+        id=joint.id,
+        couple_id=joint.couple_id,
+        account_name=joint.account_name,
+        is_active=joint.is_active,
+        total_balance=0.0,
+        created_at=joint.created_at,
+    )
+
+
+@router.get("/joint-account", response_model=JointAccountSummary)
+def get_joint_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get joint account details with full summary."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    total_contributions, total_spent, balance = _get_joint_balance(joint.id, db)
+
+    # Per-user contributions
+    user1_contrib = db.query(func.coalesce(func.sum(JointAccountContribution.amount), 0.0)).filter(
+        and_(JointAccountContribution.joint_account_id == joint.id, JointAccountContribution.user_id == couple.user_1_id)
+    ).scalar()
+    user2_contrib = db.query(func.coalesce(func.sum(JointAccountContribution.amount), 0.0)).filter(
+        and_(JointAccountContribution.joint_account_id == joint.id, JointAccountContribution.user_id == couple.user_2_id)
+    ).scalar()
+    user1_contrib = float(user1_contrib)
+    user2_contrib = float(user2_contrib)
+
+    total_c = user1_contrib + user2_contrib
+    user1_pct = (user1_contrib / total_c * 100) if total_c > 0 else 0
+    user2_pct = (user2_contrib / total_c * 100) if total_c > 0 else 0
+
+    # Current month stats
+    now = date.today()
+    month_contributions = db.query(func.coalesce(func.sum(JointAccountContribution.amount), 0.0)).filter(
+        and_(
+            JointAccountContribution.joint_account_id == joint.id,
+            extract('year', JointAccountContribution.date) == now.year,
+            extract('month', JointAccountContribution.date) == now.month,
+        )
+    ).scalar()
+    month_spent = db.query(func.coalesce(func.sum(JointAccountTransaction.amount), 0.0)).filter(
+        and_(
+            JointAccountTransaction.joint_account_id == joint.id,
+            extract('year', JointAccountTransaction.date) == now.year,
+            extract('month', JointAccountTransaction.date) == now.month,
+        )
+    ).scalar()
+
+    # Recent contributions
+    contribs = db.query(JointAccountContribution).filter(
+        JointAccountContribution.joint_account_id == joint.id
+    ).order_by(JointAccountContribution.date.desc()).limit(20).all()
+    contrib_responses = []
+    for c in contribs:
+        u = db.query(User).filter(User.id == c.user_id).first()
+        contrib_responses.append(JointAccountContributionResponse(
+            id=c.id, joint_account_id=c.joint_account_id, user_id=c.user_id,
+            user_name=u.name if u else None, amount=c.amount,
+            contribution_type=c.contribution_type, note=c.note, date=c.date, created_at=c.created_at,
+        ))
+
+    # Recent transactions
+    txns = db.query(JointAccountTransaction).filter(
+        JointAccountTransaction.joint_account_id == joint.id
+    ).order_by(JointAccountTransaction.date.desc()).limit(20).all()
+    txn_responses = [JointAccountTransactionResponse(
+        id=t.id, joint_account_id=t.joint_account_id, shared_expense_id=t.shared_expense_id,
+        amount=t.amount, description=t.description, date=t.date, created_at=t.created_at,
+    ) for t in txns]
+
+    user1 = db.query(User).filter(User.id == couple.user_1_id).first()
+    user2 = db.query(User).filter(User.id == couple.user_2_id).first()
+
+    return JointAccountSummary(
+        account=JointAccountResponse(
+            id=joint.id, couple_id=joint.couple_id, account_name=joint.account_name,
+            is_active=joint.is_active, total_balance=balance, created_at=joint.created_at,
+        ),
+        total_contributions=total_contributions,
+        total_spent=total_spent,
+        balance=balance,
+        user_1_contributed=user1_contrib,
+        user_2_contributed=user2_contrib,
+        user_1_name=user1.name if user1 else None,
+        user_2_name=user2.name if user2 else None,
+        user_1_percent=round(user1_pct, 1),
+        user_2_percent=round(user2_pct, 1),
+        month_contributions=float(month_contributions),
+        month_spent=float(month_spent),
+        recent_contributions=contrib_responses,
+        recent_transactions=txn_responses,
+    )
+
+
+@router.put("/joint-account/toggle", response_model=JointAccountResponse)
+def toggle_joint_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Enable/disable joint account."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    joint.is_active = not joint.is_active
+    db.commit()
+    db.refresh(joint)
+
+    _, _, balance = _get_joint_balance(joint.id, db)
+
+    return JointAccountResponse(
+        id=joint.id, couple_id=joint.couple_id, account_name=joint.account_name,
+        is_active=joint.is_active, total_balance=balance, created_at=joint.created_at,
+    )
+
+
+@router.post("/joint-account/contribution", response_model=JointAccountContributionResponse, status_code=status.HTTP_201_CREATED)
+def add_contribution(
+    data: JointAccountContributionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Add a contribution to the joint account."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(
+        and_(JointAccount.couple_id == couple.id, JointAccount.is_active == True)
+    ).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No active joint account found")
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Contribution must be a positive amount")
+
+    contrib = JointAccountContribution(
+        joint_account_id=joint.id,
+        user_id=current_user.id,
+        amount=data.amount,
+        contribution_type=data.contribution_type,
+        note=data.note,
+        date=data.date,
+    )
+    db.add(contrib)
+    db.commit()
+    db.refresh(contrib)
+
+    return JointAccountContributionResponse(
+        id=contrib.id, joint_account_id=contrib.joint_account_id, user_id=contrib.user_id,
+        user_name=current_user.name, amount=contrib.amount,
+        contribution_type=contrib.contribution_type, note=contrib.note, date=contrib.date,
+        created_at=contrib.created_at,
+    )
+
+
+@router.get("/joint-account/contributions", response_model=List[JointAccountContributionResponse])
+def list_contributions_joint(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all contributions to joint account."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    contribs = db.query(JointAccountContribution).filter(
+        JointAccountContribution.joint_account_id == joint.id
+    ).order_by(JointAccountContribution.date.desc()).all()
+
+    result = []
+    for c in contribs:
+        u = db.query(User).filter(User.id == c.user_id).first()
+        result.append(JointAccountContributionResponse(
+            id=c.id, joint_account_id=c.joint_account_id, user_id=c.user_id,
+            user_name=u.name if u else None, amount=c.amount,
+            contribution_type=c.contribution_type, note=c.note, date=c.date, created_at=c.created_at,
+        ))
+    return result
+
+
+@router.get("/joint-account/transactions", response_model=List[JointAccountTransactionResponse])
+def list_transactions_joint(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all transactions from joint account."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    txns = db.query(JointAccountTransaction).filter(
+        JointAccountTransaction.joint_account_id == joint.id
+    ).order_by(JointAccountTransaction.date.desc()).all()
+
+    return [JointAccountTransactionResponse(
+        id=t.id, joint_account_id=t.joint_account_id, shared_expense_id=t.shared_expense_id,
+        amount=t.amount, description=t.description, date=t.date, created_at=t.created_at,
+    ) for t in txns]
+
+
+@router.delete("/joint-account/contribution/{contribution_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_contribution(
+    contribution_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a contribution (only within 30 days)."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    contrib = db.query(JointAccountContribution).filter(
+        and_(
+            JointAccountContribution.id == contribution_id,
+            JointAccountContribution.joint_account_id == joint.id,
+        )
+    ).first()
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Contribution not found")
+
+    # Check 30-day limit
+    days_old = (date.today() - contrib.date).days
+    if days_old > 30:
+        raise HTTPException(status_code=400, detail="Cannot delete contributions older than 30 days")
+
+    db.delete(contrib)
+    db.commit()
 
 
 # ─── Savings Goals ───────────────────────────────────────────────────────────

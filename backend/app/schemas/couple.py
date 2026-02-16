@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as Date, datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -32,6 +32,7 @@ class SharedExpenseCreate(BaseModel):
     split_type: str = "equal"  # equal / percentage / custom
     split_ratio: str = "50:50"
     date: Date
+    paid_from_joint: bool = False
 
 
 class SharedExpenseUpdate(BaseModel):
@@ -54,6 +55,7 @@ class SharedExpenseResponse(BaseModel):
     split_type: str
     split_ratio: str
     date: Date
+    paid_from_joint: bool = False
     created_at: datetime
 
     class Config:
@@ -131,3 +133,73 @@ class SavingsContributionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Joint Account ---
+
+class JointAccountCreate(BaseModel):
+    account_name: str = "Joint Account"
+
+
+class JointAccountResponse(BaseModel):
+    id: int
+    couple_id: int
+    account_name: str
+    is_active: bool
+    total_balance: float = 0.0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class JointAccountContributionCreate(BaseModel):
+    amount: float
+    contribution_type: str = "salary"  # salary / bonus / savings / other / withdrawal
+    note: Optional[str] = None
+    date: Date
+
+
+class JointAccountContributionResponse(BaseModel):
+    id: int
+    joint_account_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    amount: float
+    contribution_type: str
+    note: Optional[str]
+    date: Date
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class JointAccountTransactionResponse(BaseModel):
+    id: int
+    joint_account_id: int
+    shared_expense_id: Optional[int] = None
+    amount: float
+    description: Optional[str]
+    date: Date
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class JointAccountSummary(BaseModel):
+    account: JointAccountResponse
+    total_contributions: float
+    total_spent: float
+    balance: float
+    user_1_contributed: float
+    user_2_contributed: float
+    user_1_name: Optional[str] = None
+    user_2_name: Optional[str] = None
+    user_1_percent: float = 0.0
+    user_2_percent: float = 0.0
+    month_contributions: float = 0.0
+    month_spent: float = 0.0
+    recent_contributions: List[JointAccountContributionResponse] = []
+    recent_transactions: List[JointAccountTransactionResponse] = []

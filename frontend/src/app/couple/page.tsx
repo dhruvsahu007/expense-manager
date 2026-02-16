@@ -4,11 +4,12 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, CATEGORY_ICONS } from '@/lib/utils';
-import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement } from '@/types';
+import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 const CATEGORIES = ['Food', 'Rent', 'Utilities', 'Travel', 'Shopping', 'Subscriptions', 'EMI', 'Entertainment', 'Health', 'Other'];
+const CONTRIBUTION_TYPES = ['salary', 'bonus', 'savings', 'other'];
 
 export default function CouplePage() {
   const { user } = useAuth();
@@ -18,8 +19,9 @@ export default function CouplePage() {
   const [balance, setBalance] = useState<BalanceSummary | null>(null);
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [jointSummary, setJointSummary] = useState<JointAccountSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'expenses' | 'settlements' | 'goals'>('expenses');
+  const [tab, setTab] = useState<'expenses' | 'settlements' | 'goals' | 'joint'>('expenses');
 
   // Invite form
   const [partnerEmail, setPartnerEmail] = useState('');
@@ -35,6 +37,7 @@ export default function CouplePage() {
   const [seMyShare, setSeMyShare] = useState('');
   const [sePartnerShare, setSePartnerShare] = useState('');
   const [seDate, setSeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [sePaidFromJoint, setSePaidFromJoint] = useState(false);
   const [seSubmitting, setSeSubmitting] = useState(false);
 
   // Settlement form
@@ -64,6 +67,15 @@ export default function CouplePage() {
   const [editExpPartnerShare, setEditExpPartnerShare] = useState('');
   const [editExpDate, setEditExpDate] = useState('');
 
+  // Joint Account form
+  const [showContribForm, setShowContribForm] = useState(false);
+  const [contribAmount, setContribAmount] = useState('');
+  const [contribType, setContribType] = useState('salary');
+  const [contribNote, setContribNote] = useState('');
+  const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0]);
+  const [contribSubmitting, setContribSubmitting] = useState(false);
+  const [jointSubTab, setJointSubTab] = useState<'overview' | 'contributions' | 'transactions'>('overview');
+
   const loadData = async () => {
     try {
       const coupleData = await api.getCoupleStatus();
@@ -79,6 +91,11 @@ export default function CouplePage() {
         setBalance(bal);
         setGoals(g);
         setSettlements(s);
+        // Load joint account (may not exist yet)
+        try {
+          const js = await api.getJointAccount();
+          setJointSummary(js);
+        } catch { setJointSummary(null); }
       }
     } catch {
       try {
@@ -136,10 +153,11 @@ export default function CouplePage() {
         split_type: seSplitType,
         split_ratio: ratio,
         date: seDate,
+        paid_from_joint: sePaidFromJoint,
       });
-      toast.success('Shared expense added!');
+      toast.success(sePaidFromJoint ? 'Expense added from Joint Account! 💰' : 'Shared expense added!');
       setSeAmount(''); setSeDesc(''); setSeMyShare(''); setSePartnerShare('');
-      setSeSplitType('equal'); setShowExpenseForm(false);
+      setSeSplitType('equal'); setShowExpenseForm(false); setSePaidFromJoint(false);
       loadData();
     } catch { toast.error('Failed to add expense'); } finally { setSeSubmitting(false); }
   };
@@ -181,6 +199,45 @@ export default function CouplePage() {
       setContributeGoalId(null); setContributeAmount('');
       loadData();
     } catch { toast.error('Failed to contribute'); }
+  };
+
+  // ─── Joint Account handlers ───────────────────────────────────────────────
+  const handleCreateJointAccount = async () => {
+    try {
+      await api.createJointAccount({ account_name: 'Joint Account' });
+      toast.success('Joint Account created! 🎉');
+      loadData();
+    } catch (err: any) { toast.error(err.message || 'Failed to create joint account'); }
+  };
+
+  const handleToggleJointAccount = async () => {
+    try {
+      const result = await api.toggleJointAccount();
+      toast.success(result.is_active ? 'Joint Account activated!' : 'Joint Account deactivated');
+      loadData();
+    } catch { toast.error('Failed to toggle joint account'); }
+  };
+
+  const handleAddContribution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContribSubmitting(true);
+    try {
+      await api.addJointContribution({
+        amount: parseFloat(contribAmount),
+        contribution_type: contribType,
+        note: contribNote || undefined,
+        date: contribDate,
+      });
+      toast.success('Contribution added! 💰');
+      setContribAmount(''); setContribNote(''); setShowContribForm(false); loadData();
+    } catch { toast.error('Failed to add contribution'); }
+    finally { setContribSubmitting(false); }
+  };
+
+  const handleDeleteContribution = async (id: number) => {
+    if (!confirm('Delete this contribution?')) return;
+    try { await api.deleteJointContribution(id); toast.success('Contribution removed'); loadData(); }
+    catch (err: any) { toast.error(err.message || 'Failed to delete'); }
   };
 
   const handleDeleteSharedExpense = async (id: number) => {
@@ -268,19 +325,19 @@ export default function CouplePage() {
       <AppLayout>
         <div className="max-w-lg mx-auto space-y-6 pb-20 md:pb-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-slate-800">👫 Couple Mode</h1>
-            <p className="text-slate-500 mt-2">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Couple Mode</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2">
               Invite your partner to start tracking shared expenses together
             </p>
           </div>
 
           {isInvitee && couple && (
-            <div className="bg-amber-50 rounded-xl p-5">
-              <h3 className="font-semibold text-amber-800 mb-3">💌 You have an invite!</h3>
-              <div className="flex items-center justify-between bg-white rounded-lg p-4">
+            <div className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-5">
+              <h3 className="font-semibold text-amber-800 dark:text-amber-300 mb-3">💌 You have an invite!</h3>
+              <div className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg p-4">
                 <div>
-                  <p className="font-medium text-slate-800">{couple.partner_name}</p>
-                  <p className="text-sm text-slate-500">{couple.partner_email}</p>
+                  <p className="font-medium text-slate-800 dark:text-white">{couple.partner_name}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{couple.partner_email}</p>
                   <p className="text-xs text-slate-400 mt-1">wants to track expenses together</p>
                 </div>
                 <div className="flex gap-2">
@@ -342,10 +399,57 @@ export default function CouplePage() {
       <div className="space-y-6 pb-24 md:pb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">👫 Couple Mode</h1>
-            <p className="text-slate-500 text-sm">With {couple.partner_name} · {couple.partner_email}</p>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Couple Mode</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">With {couple.partner_name} · {couple.partner_email}</p>
           </div>
         </div>
+
+        {/* ─── Joint Account Widget (if active) ─── */}
+        {jointSummary && jointSummary.account.is_active && (
+          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-5 text-white">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">💰</span>
+                <div>
+                  <p className="font-semibold text-lg">{jointSummary.account.account_name}</p>
+                  <p className="text-xs opacity-80">Pooled account for shared expenses</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs opacity-80">Balance</p>
+                <p className={`text-2xl font-bold ${jointSummary.balance < 0 ? 'text-red-200' : ''}`}>
+                  {formatCurrency(jointSummary.balance)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>{jointSummary.user_1_name}: {formatCurrency(jointSummary.user_1_contributed)} ({jointSummary.user_1_percent}%)</span>
+                <span>{jointSummary.user_2_name}: {formatCurrency(jointSummary.user_2_contributed)} ({jointSummary.user_2_percent}%)</span>
+              </div>
+              <div className="h-3 bg-white/20 rounded-full overflow-hidden flex">
+                {jointSummary.total_contributions > 0 && (
+                  <>
+                    <div className="bg-violet-200 h-full transition-all" style={{ width: `${jointSummary.user_1_percent}%` }} />
+                    <div className="bg-purple-200 h-full transition-all" style={{ width: `${jointSummary.user_2_percent}%` }} />
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-white/20">
+              <div><p className="text-xs opacity-70">This Month In</p><p className="font-semibold">{formatCurrency(jointSummary.month_contributions)}</p></div>
+              <div><p className="text-xs opacity-70">This Month Out</p><p className="font-semibold">{formatCurrency(jointSummary.month_spent)}</p></div>
+              <div><p className="text-xs opacity-70">Total Contributed</p><p className="font-semibold">{formatCurrency(jointSummary.total_contributions)}</p></div>
+            </div>
+            {jointSummary.balance < 0 && (
+              <div className="mt-3 bg-red-500/30 rounded-lg px-3 py-2 text-sm">⚠️ Joint account is in deficit! Add funds to cover expenses.</div>
+            )}
+            <button onClick={() => { setTab('joint'); setShowContribForm(true); }}
+              className="mt-3 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition w-full text-center">
+              + Add Funds
+            </button>
+          </div>
+        )}
 
         {/* Balance Card */}
         {balance && (
@@ -394,19 +498,15 @@ export default function CouplePage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2">
-          <button onClick={() => setTab('expenses')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'expenses' ? 'bg-mint-600 text-white' : 'bg-white text-slate-600'}`}>
-            Shared Expenses
-          </button>
-          <button onClick={() => setTab('settlements')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'settlements' ? 'bg-mint-600 text-white' : 'bg-white text-slate-600'}`}>
-            Settlements {settlements.length > 0 && <span className="ml-1 text-xs opacity-70">({settlements.length})</span>}
-          </button>
-          <button onClick={() => setTab('goals')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === 'goals' ? 'bg-mint-600 text-white' : 'bg-white text-slate-600'}`}>
-            Savings Goals
-          </button>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {(['expenses', 'settlements', 'goals', 'joint'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${tab === t ? 'bg-mint-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+              {t === 'expenses' ? 'Shared Expenses' :
+               t === 'settlements' ? `Settlements${settlements.length > 0 ? ` (${settlements.length})` : ''}` :
+               t === 'goals' ? 'Savings Goals' : '💰 Joint Account'}
+            </button>
+          ))}
         </div>
 
         {/* ─── Shared Expenses Tab ─── */}
@@ -485,11 +585,27 @@ export default function CouplePage() {
                         className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none" placeholder="Optional" />
                     </div>
                   </div>
+                  {/* Pay from Joint Account toggle */}
+                  {jointSummary && jointSummary.account.is_active && (
+                    <div className="bg-violet-50 dark:bg-violet-900/30 rounded-xl p-4">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={sePaidFromJoint} onChange={(e) => setSePaidFromJoint(e.target.checked)}
+                          className="w-5 h-5 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
+                        <div>
+                          <p className="text-sm font-medium text-violet-800 dark:text-violet-200">💰 Pay from Joint Account</p>
+                          <p className="text-xs text-violet-600 dark:text-violet-300">Balance: {formatCurrency(jointSummary.balance)}</p>
+                        </div>
+                      </label>
+                      {sePaidFromJoint && seAmount && parseFloat(seAmount) > jointSummary.balance && (
+                        <p className="text-xs text-red-600 mt-2">⚠️ Amount exceeds joint account balance!</p>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-3">
                     <button type="submit" disabled={seSubmitting} className="bg-mint-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-mint-700 disabled:opacity-50">
-                      {seSubmitting ? 'Adding...' : 'Add'}
+                      {seSubmitting ? 'Adding...' : sePaidFromJoint ? '💰 Add from Joint' : 'Add'}
                     </button>
-                    <button type="button" onClick={() => setShowExpenseForm(false)} className="px-6 py-2.5 rounded-lg border border-slate-200 text-slate-600">Cancel</button>
+                    <button type="button" onClick={() => { setShowExpenseForm(false); setSePaidFromJoint(false); }} className="px-6 py-2.5 rounded-lg border border-slate-200 text-slate-600">Cancel</button>
                   </div>
                 </form>
               </div>
@@ -573,9 +689,12 @@ export default function CouplePage() {
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">{CATEGORY_ICONS[exp.category] || '📦'}</span>
                           <div>
-                            <p className="font-medium text-slate-800">{exp.description || exp.category}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-800">{exp.description || exp.category}</p>
+                              {exp.paid_from_joint && <span className="text-xs bg-violet-100 dark:bg-violet-800 text-violet-700 dark:text-violet-200 px-1.5 py-0.5 rounded">💰 Joint</span>}
+                            </div>
                             <p className="text-xs text-slate-400">
-                              Paid by {exp.paid_by_name} · {exp.split_type === 'equal' ? '50/50' : (() => {
+                              {exp.paid_from_joint ? 'From Joint Account' : `Paid by ${exp.paid_by_name}`} · {exp.split_type === 'equal' ? '50/50' : (() => {
                                 const parts = exp.split_ratio.split(':');
                                 const isUser1 = user?.id === couple.user_1_id;
                                 const myShare = isUser1 ? parts[0] : parts[1];
@@ -779,6 +898,274 @@ export default function CouplePage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══════════ JOINT ACCOUNT TAB ═══════════ */}
+        {tab === 'joint' && (
+          <>
+            {!jointSummary ? (
+              /* No joint account yet — setup screen */
+              <div className="max-w-md mx-auto text-center py-8 space-y-6">
+                <div className="text-6xl">💰</div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Joint Account</h2>
+                <p className="text-slate-500 dark:text-slate-400">
+                  Pool your salaries into a shared account for common expenses.
+                  Both partners contribute and all joint expenses are deducted automatically.
+                </p>
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm space-y-4 text-left">
+                  <h3 className="font-semibold text-slate-700 dark:text-slate-200">How it works:</h3>
+                  <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                    <li className="flex gap-2">✅ Both partners add their salary/funds</li>
+                    <li className="flex gap-2">✅ Track who contributed how much</li>
+                    <li className="flex gap-2">✅ Shared expenses can deduct from the joint pool</li>
+                    <li className="flex gap-2">✅ Real-time balance &amp; monthly summary</li>
+                    <li className="flex gap-2">✅ Low balance alerts</li>
+                  </ul>
+                </div>
+                <button onClick={handleCreateJointAccount}
+                  className="bg-gradient-to-r from-violet-500 to-purple-600 text-white px-8 py-3 rounded-xl font-semibold text-lg hover:from-violet-600 hover:to-purple-700 transition shadow-lg">
+                  🚀 Create Joint Account
+                </button>
+              </div>
+            ) : (
+              /* Joint account exists */
+              <div className="space-y-6">
+                {/* Status & Toggle */}
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-slate-800 dark:text-white text-lg">💰 {jointSummary.account.account_name}</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Created {new Date(jointSummary.account.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full ${jointSummary.account.is_active ? 'bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                        {jointSummary.account.is_active ? '● Active' : '○ Inactive'}
+                      </span>
+                      <button onClick={handleToggleJointAccount}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${jointSummary.account.is_active ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100' : 'bg-mint-50 dark:bg-mint-900/30 text-mint-600 hover:bg-mint-100'}`}>
+                        {jointSummary.account.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Balance Overview */}
+                <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-5 text-white">
+                  <div className="text-center mb-4">
+                    <p className="text-sm opacity-80">Current Balance</p>
+                    <p className={`text-4xl font-bold ${jointSummary.balance < 0 ? 'text-red-200' : ''}`}>
+                      {formatCurrency(jointSummary.balance)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/10 rounded-lg p-3 text-center">
+                      <p className="text-xs opacity-70">Total In</p>
+                      <p className="text-xl font-bold">{formatCurrency(jointSummary.total_contributions)}</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-3 text-center">
+                      <p className="text-xs opacity-70">Total Out</p>
+                      <p className="text-xl font-bold">{formatCurrency(jointSummary.total_spent)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-white/20">
+                    <p className="text-sm font-medium mb-2">Contribution Split</p>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span>{jointSummary.user_1_name}: {formatCurrency(jointSummary.user_1_contributed)} ({jointSummary.user_1_percent}%)</span>
+                      <span>{jointSummary.user_2_name}: {formatCurrency(jointSummary.user_2_contributed)} ({jointSummary.user_2_percent}%)</span>
+                    </div>
+                    <div className="h-4 bg-white/20 rounded-full overflow-hidden flex">
+                      {jointSummary.total_contributions > 0 && (
+                        <>
+                          <div className="bg-violet-200 h-full transition-all rounded-l-full" style={{ width: `${jointSummary.user_1_percent}%` }} />
+                          <div className="bg-purple-300 h-full transition-all rounded-r-full" style={{ width: `${jointSummary.user_2_percent}%` }} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <div className="bg-white/10 rounded-lg p-3">
+                      <p className="text-xs opacity-70">This Month Added</p>
+                      <p className="font-bold">{formatCurrency(jointSummary.month_contributions)}</p>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-3">
+                      <p className="text-xs opacity-70">This Month Spent</p>
+                      <p className="font-bold">{formatCurrency(jointSummary.month_spent)}</p>
+                    </div>
+                  </div>
+                  {jointSummary.balance < 0 && (
+                    <div className="mt-3 bg-red-500/30 rounded-lg px-3 py-2 text-sm">⚠️ Account in deficit! Add funds to cover expenses.</div>
+                  )}
+                </div>
+
+                {/* Add Contribution Button & Form */}
+                {jointSummary.account.is_active && (
+                  <button onClick={() => setShowContribForm(!showContribForm)}
+                    className="w-full bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 py-3 rounded-xl font-medium hover:bg-violet-100 dark:hover:bg-violet-900/50 transition text-center">
+                    + Add Contribution
+                  </button>
+                )}
+
+                {showContribForm && (
+                  <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm animate-slide-up">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">💰 Add Funds to Joint Account</h3>
+                    <form onSubmit={handleAddContribution} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount (₹)</label>
+                          <input type="number" value={contribAmount} onChange={(e) => setContribAmount(e.target.value)} required min="1"
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-violet-500 outline-none" placeholder="50000" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Type</label>
+                          <select value={contribType} onChange={(e) => setContribType(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-violet-500 outline-none">
+                            {CONTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label>
+                          <input type="date" value={contribDate} onChange={(e) => setContribDate(e.target.value)} required
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-violet-500 outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Note (optional)</label>
+                          <input type="text" value={contribNote} onChange={(e) => setContribNote(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-violet-500 outline-none" placeholder="e.g., Feb salary" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="submit" disabled={contribSubmitting}
+                          className="bg-gradient-to-r from-violet-500 to-purple-600 text-white px-6 py-2.5 rounded-lg font-medium hover:from-violet-600 hover:to-purple-700 disabled:opacity-50">
+                          {contribSubmitting ? 'Adding...' : '💰 Add to Joint Account'}
+                        </button>
+                        <button type="button" onClick={() => setShowContribForm(false)}
+                          className="px-6 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Sub-tabs */}
+                <div className="flex gap-2">
+                  {(['overview', 'contributions', 'transactions'] as const).map(st => (
+                    <button key={st} onClick={() => setJointSubTab(st)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${jointSubTab === st ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                      {st === 'overview' ? '📊 Overview' : st === 'contributions' ? '📥 Contributions' : '📤 Transactions'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Overview sub-tab */}
+                {jointSubTab === 'overview' && jointSummary.recent_contributions.length === 0 && jointSummary.recent_transactions.length === 0 && (
+                  <div className="text-center py-8 text-slate-400">
+                    <p className="text-4xl mb-3">💰</p>
+                    <p>No activity yet. Add your first contribution!</p>
+                  </div>
+                )}
+                {jointSubTab === 'overview' && (jointSummary.recent_contributions.length > 0 || jointSummary.recent_transactions.length > 0) && (
+                  <div className="space-y-4">
+                    {jointSummary.recent_contributions.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">Recent Contributions</h4>
+                        <div className="space-y-2">
+                          {jointSummary.recent_contributions.slice(0, 5).map(c => (
+                            <div key={c.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">📥</span>
+                                <div>
+                                  <p className="font-medium text-slate-800 dark:text-white">{c.user_name}</p>
+                                  <p className="text-xs text-slate-400">
+                                    {c.contribution_type.charAt(0).toUpperCase() + c.contribution_type.slice(1)}
+                                    {c.note && ` · ${c.note}`} · {formatDate(c.date)}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="font-semibold text-green-600 dark:text-green-400">+{formatCurrency(c.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {jointSummary.recent_transactions.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">Recent Expenses from Joint</h4>
+                        <div className="space-y-2">
+                          {jointSummary.recent_transactions.slice(0, 5).map(t => (
+                            <div key={t.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">📤</span>
+                                <div>
+                                  <p className="font-medium text-slate-800 dark:text-white">{t.description || 'Expense'}</p>
+                                  <p className="text-xs text-slate-400">{formatDate(t.date)}</p>
+                                </div>
+                              </div>
+                              <span className="font-semibold text-red-600 dark:text-red-400">-{formatCurrency(t.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Contributions sub-tab */}
+                {jointSubTab === 'contributions' && (
+                  <div className="space-y-2">
+                    {jointSummary.recent_contributions.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400"><p className="text-3xl mb-2">📥</p><p>No contributions yet</p></div>
+                    ) : (
+                      jointSummary.recent_contributions.map(c => (
+                        <div key={c.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between group">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">📥</span>
+                            <div>
+                              <p className="font-medium text-slate-800 dark:text-white">{c.user_name}</p>
+                              <p className="text-xs text-slate-400">
+                                {c.contribution_type.charAt(0).toUpperCase() + c.contribution_type.slice(1)}
+                                {c.note && ` · ${c.note}`} · {formatDate(c.date)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-green-600 dark:text-green-400">+{formatCurrency(c.amount)}</span>
+                            <button onClick={() => handleDeleteContribution(c.id)}
+                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition opacity-0 group-hover:opacity-100 md:opacity-100"
+                              title="Delete">🗑️</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Transactions sub-tab */}
+                {jointSubTab === 'transactions' && (
+                  <div className="space-y-2">
+                    {jointSummary.recent_transactions.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400"><p className="text-3xl mb-2">📤</p><p>No transactions yet</p></div>
+                    ) : (
+                      jointSummary.recent_transactions.map(t => (
+                        <div key={t.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">📤</span>
+                            <div>
+                              <p className="font-medium text-slate-800 dark:text-white">{t.description || 'Shared Expense'}</p>
+                              <p className="text-xs text-slate-400">{formatDate(t.date)}</p>
+                            </div>
+                          </div>
+                          <span className="font-semibold text-red-600 dark:text-red-400">-{formatCurrency(t.amount)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </>

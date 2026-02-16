@@ -258,6 +258,44 @@ class ApiClient {
     );
   }
 
+  // ─── Joint Account ──────────────────────────────────────────────────────
+
+  async createJointAccount(data: import('@/types').JointAccountCreate = {}) {
+    return this.request<import('@/types').JointAccount>('/couple/joint-account', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getJointAccount() {
+    return this.request<import('@/types').JointAccountSummary>('/couple/joint-account');
+  }
+
+  async toggleJointAccount() {
+    return this.request<import('@/types').JointAccount>('/couple/joint-account/toggle', {
+      method: 'PUT',
+    });
+  }
+
+  async addJointContribution(data: import('@/types').JointAccountContributionCreate) {
+    return this.request<import('@/types').JointAccountContribution>('/couple/joint-account/contribution', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getJointContributions() {
+    return this.request<import('@/types').JointAccountContribution[]>('/couple/joint-account/contributions');
+  }
+
+  async getJointTransactions() {
+    return this.request<import('@/types').JointAccountTransaction[]>('/couple/joint-account/transactions');
+  }
+
+  async deleteJointContribution(id: number) {
+    return this.request<null>(`/couple/joint-account/contribution/${id}`, { method: 'DELETE' });
+  }
+
   // ─── Budgets ─────────────────────────────────────────────────────────────
 
   async createBudget(data: import('@/types').BudgetCreate) {

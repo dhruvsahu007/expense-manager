@@ -109,6 +109,7 @@ export interface SharedExpense {
   split_type: string;
   split_ratio: string;
   date: string;
+  paid_from_joint?: boolean;
   created_at: string;
 }
 
@@ -119,6 +120,7 @@ export interface SharedExpenseCreate {
   split_type: string;
   split_ratio: string;
   date: string;
+  paid_from_joint?: boolean;
 }
 
 export interface SharedExpenseUpdate {
@@ -274,4 +276,65 @@ export interface Notification {
   notification_type: string;
   is_read: number;
   created_at: string;
+}
+
+// ─── Joint Account ───────────────────────────────────────────────────────────
+
+export interface JointAccount {
+  id: number;
+  couple_id: number;
+  account_name: string;
+  is_active: boolean;
+  total_balance: number;
+  created_at: string;
+}
+
+export interface JointAccountCreate {
+  account_name?: string;
+}
+
+export interface JointAccountContribution {
+  id: number;
+  joint_account_id: number;
+  user_id: number;
+  user_name?: string;
+  amount: number;
+  contribution_type: string;
+  note: string | null;
+  date: string;
+  created_at: string;
+}
+
+export interface JointAccountContributionCreate {
+  amount: number;
+  contribution_type: string;
+  note?: string;
+  date: string;
+}
+
+export interface JointAccountTransaction {
+  id: number;
+  joint_account_id: number;
+  shared_expense_id?: number;
+  amount: number;
+  description: string | null;
+  date: string;
+  created_at: string;
+}
+
+export interface JointAccountSummary {
+  account: JointAccount;
+  total_contributions: number;
+  total_spent: number;
+  balance: number;
+  user_1_contributed: number;
+  user_2_contributed: number;
+  user_1_name?: string;
+  user_2_name?: string;
+  user_1_percent: number;
+  user_2_percent: number;
+  month_contributions: number;
+  month_spent: number;
+  recent_contributions: JointAccountContribution[];
+  recent_transactions: JointAccountTransaction[];
 }
