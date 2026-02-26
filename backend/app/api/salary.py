@@ -34,7 +34,7 @@ def check_salary(
         .first()
     ) is not None
 
-    is_salary_day = today.day >= current_user.salary_date
+    is_salary_day = today.day == current_user.salary_date
 
     return SalaryCheckResponse(
         is_salary_day=is_salary_day,

@@ -3,6 +3,7 @@
 import AppLayout from '@/components/AppLayout';
 import { api } from '@/lib/api';
 import { formatCurrency, CATEGORY_ICONS } from '@/lib/utils';
+import { PencilIcon, TrashIcon, PlusIcon, CheckIcon, XMarkIcon } from '@/lib/icons';
 import { Budget } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -89,15 +90,15 @@ export default function BudgetsPage() {
       <div className="space-y-6 pb-20 md:pb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">🎯 Budgets</h1>
-            <p className="text-slate-500 text-sm">Set monthly limits per category</p>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">🎯 Budgets</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Set monthly limits per category</p>
           </div>
           {availableCategories.length > 0 && (
             <button
               onClick={() => { setShowForm(!showForm); setCategory(availableCategories[0] || 'Food'); }}
-              className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700 transition"
+              className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700 transition flex items-center gap-1.5"
             >
-              + Add Budget
+              <PlusIcon size={16} /> Add Budget
             </button>
           )}
         </div>
@@ -105,23 +106,23 @@ export default function BudgetsPage() {
         {/* Summary Cards */}
         {budgets.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500">Total Budget</p>
-              <p className="text-lg font-bold text-slate-800">{formatCurrency(totalBudget)}</p>
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total Budget</p>
+              <p className="text-lg font-bold text-slate-800 dark:text-white">{formatCurrency(totalBudget)}</p>
             </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500">Total Spent</p>
-              <p className="text-lg font-bold text-slate-800">{formatCurrency(totalSpent)}</p>
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total Spent</p>
+              <p className="text-lg font-bold text-slate-800 dark:text-white">{formatCurrency(totalSpent)}</p>
             </div>
-            <div className={`rounded-xl p-4 shadow-sm ${totalRemaining >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-              <p className="text-xs text-slate-500">Remaining</p>
+            <div className={`rounded-xl p-4 shadow-sm ${totalRemaining >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Remaining</p>
               <p className={`text-lg font-bold ${totalRemaining >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                 {formatCurrency(Math.abs(totalRemaining))}
                 {totalRemaining < 0 && ' over'}
               </p>
             </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500">Alerts</p>
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Alerts</p>
               <div className="flex items-center gap-2 mt-1">
                 {overBudgetCount > 0 && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{overBudgetCount} over</span>}
                 {warningCount > 0 && <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">{warningCount} warning</span>}
@@ -133,10 +134,10 @@ export default function BudgetsPage() {
 
         {/* Overall Progress Bar */}
         {budgets.length > 0 && (
-          <div className="bg-white rounded-xl p-5 shadow-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-slate-700">Overall Budget Usage</p>
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Overall Budget Usage</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 {totalBudget > 0 ? `${((totalSpent / totalBudget) * 100).toFixed(0)}%` : '0%'}
               </p>
             </div>
@@ -155,27 +156,27 @@ export default function BudgetsPage() {
         )}
 
         {showForm && (
-          <div className="bg-white rounded-xl p-6 shadow-sm animate-slide-up">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm animate-slide-up">
             <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 items-end">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Category</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none"
+                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white focus:border-mint-500 outline-none"
                 >
                   {availableCategories.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
                 </select>
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Limit (₹)</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Monthly Limit (₹)</label>
                 <input
                   type="number"
                   value={limit}
                   onChange={(e) => setLimit(e.target.value)}
                   required
                   min="1"
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none"
+                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white focus:border-mint-500 outline-none"
                   placeholder="5000"
                 />
               </div>
@@ -183,11 +184,11 @@ export default function BudgetsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="bg-mint-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-mint-700 transition disabled:opacity-50"
+                  className="bg-mint-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-mint-700 transition disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Save
+                  <CheckIcon size={16} /> Save
                 </button>
-                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2.5 rounded-lg border text-slate-600">
+                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2.5 rounded-lg border dark:border-slate-700 text-slate-600 dark:text-slate-300">
                   Cancel
                 </button>
               </div>
@@ -197,7 +198,7 @@ export default function BudgetsPage() {
 
         {loading ? (
           <div className="space-y-3">
-            {[1, 2, 3].map((i) => <div key={i} className="bg-white rounded-xl h-24 animate-pulse" />)}
+            {[1, 2, 3].map((i) => <div key={i} className="bg-white dark:bg-slate-800 rounded-xl h-24 animate-pulse" />)}
           </div>
         ) : budgets.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
@@ -214,22 +215,26 @@ export default function BudgetsPage() {
               const icon = CATEGORY_ICONS[budget.category] || '📦';
 
               return (
-                <div key={budget.id} className={`bg-white rounded-xl p-4 shadow-sm border-l-4 ${
+                <div key={budget.id} className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border-l-4 ${
                   isOver ? 'border-l-red-500' : isWarning ? 'border-l-amber-400' : 'border-l-mint-500'
                 }`}>
                   {editingId === budget.id ? (
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{icon}</span>
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-800 mb-2">{budget.category}</p>
+                        <p className="font-semibold text-slate-800 dark:text-white mb-2">{budget.category}</p>
                         <div className="flex items-center gap-2">
                           <input
                             type="number" value={editLimit} onChange={(e) => setEditLimit(e.target.value)}
-                            className="px-3 py-2 rounded-lg border border-slate-200 text-sm w-32 focus:border-mint-500 outline-none"
+                            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm w-32 focus:border-mint-500 outline-none"
                             placeholder="New limit"
                           />
-                          <button onClick={handleSaveEdit} className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Save</button>
-                          <button onClick={() => setEditingId(null)} className="px-3 py-2 rounded-lg border text-sm text-slate-500">Cancel</button>
+                          <button onClick={handleSaveEdit} className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                            <CheckIcon size={14} /> Save
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="px-3 py-2 rounded-lg border dark:border-slate-700 text-sm text-slate-500 flex items-center gap-1.5">
+                            <XMarkIcon size={14} /> Cancel
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -238,36 +243,36 @@ export default function BudgetsPage() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-xl">{icon}</span>
-                          <h3 className="font-semibold text-slate-800">{budget.category}</h3>
+                          <h3 className="font-semibold text-slate-800 dark:text-white">{budget.category}</h3>
                           {isOver && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Over budget!</span>}
                           {isWarning && <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">⚠️ Warning</span>}
                         </div>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleEdit(budget)}
-                            className="p-1 text-slate-300 hover:text-blue-500 transition text-sm"
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition"
                             title="Edit limit"
                           >
-                            ✏️
+                            <PencilIcon size={15} />
                           </button>
                           <button
                             onClick={() => handleDelete(budget.id)}
-                            className="p-1 text-slate-300 hover:text-red-500 transition text-sm"
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition"
                             title="Delete"
                           >
-                            ✕
+                            <TrashIcon size={15} />
                           </button>
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 dark:text-slate-400">
                           {formatCurrency(budget.current_spend || 0)} / {formatCurrency(budget.monthly_limit)}
                         </span>
                         <span className={`font-medium ${isOver ? 'text-red-500' : isWarning ? 'text-amber-500' : 'text-mint-600'}`}>
                           {percentUsed.toFixed(0)}%
                         </span>
                       </div>
-                      <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
                             isOver ? 'bg-red-500' : isWarning ? 'bg-amber-400' : 'bg-mint-500'

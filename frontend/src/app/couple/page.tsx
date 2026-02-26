@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, CATEGORY_ICONS } from '@/lib/utils';
+import { PencilIcon, TrashIcon, XMarkIcon } from '@/lib/icons';
 import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -707,11 +708,11 @@ export default function CouplePage() {
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-slate-800">{formatCurrency(exp.amount)}</span>
                           <button onClick={() => handleEditSharedExpense(exp)}
-                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition opacity-0 group-hover:opacity-100 md:opacity-100"
-                            title="Edit expense">✏️</button>
+                            className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition"
+                            title="Edit expense"><PencilIcon size={15} /></button>
                           <button onClick={() => handleDeleteSharedExpense(exp.id)}
-                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 md:opacity-100"
-                            title="Delete expense">🗑️</button>
+                            className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                            title="Delete expense"><TrashIcon size={15} /></button>
                         </div>
                       </div>
                     )}
@@ -889,7 +890,7 @@ export default function CouplePage() {
                             <input type="number" value={contributeAmount} onChange={(e) => setContributeAmount(e.target.value)}
                               className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm" placeholder="Amount" />
                             <button onClick={() => handleContribute(goal.id)} className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm">Add</button>
-                            <button onClick={() => setContributeGoalId(null)} className="px-3 py-2 rounded-lg border text-sm text-slate-500">✕</button>
+                            <button onClick={() => setContributeGoalId(null)} className="px-3 py-2 rounded-lg border text-sm text-slate-500 flex items-center gap-1"><XMarkIcon size={14} /> Cancel</button>
                           </div>
                         ) : (
                           <button onClick={() => setContributeGoalId(goal.id)} className="text-mint-600 text-sm font-medium hover:underline">+ Contribute</button>
@@ -1136,8 +1137,8 @@ export default function CouplePage() {
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-green-600 dark:text-green-400">+{formatCurrency(c.amount)}</span>
                             <button onClick={() => handleDeleteContribution(c.id)}
-                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition opacity-0 group-hover:opacity-100 md:opacity-100"
-                              title="Delete">🗑️</button>
+                              className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                              title="Delete"><TrashIcon size={15} /></button>
                           </div>
                         </div>
                       ))
