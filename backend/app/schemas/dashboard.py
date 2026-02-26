@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -59,6 +59,9 @@ class IndividualDashboard(BaseModel):
     budget_overview: List[BudgetOverview] = []
     previous_month_expenses: float = 0.0
     month_over_month_change: float = 0.0  # percentage change
+    salary_credited: bool = False
+    salary_amount: Optional[float] = None
+    salary_credited_date: Optional[date] = None
 
 
 class CoupleDashboard(BaseModel):

@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, Base
-from app.api import auth, expenses, couple, budgets, dashboard, reports
+from app.api import auth, expenses, couple, budgets, dashboard, reports, salary
 
 # Import all models so they register with Base
 from app.models import user, expense, couple as couple_models, budget  # noqa
 from app.models.expense import RecurringExpense  # noqa
 from app.models.couple import Settlement  # noqa
+from app.models.salary import SalaryCredit  # noqa
 
 settings = get_settings()
 
@@ -46,6 +47,7 @@ app.include_router(couple.router, prefix="/api")
 app.include_router(budgets.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(salary.router, prefix="/api")
 
 
 @app.get("/")

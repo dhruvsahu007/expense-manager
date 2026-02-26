@@ -370,6 +370,23 @@ class ApiClient {
   async getReports(months: number = 12) {
     return this.request<import('@/types').ReportsData>(`/reports?months=${months}`);
   }
+
+  // ─── Salary ──────────────────────────────────────────────────────────────
+
+  async checkSalary() {
+    return this.request<import('@/types').SalaryCheckResponse>('/salary/check');
+  }
+
+  async creditSalary(data: import('@/types').SalaryCreditCreate) {
+    return this.request<import('@/types').SalaryCreditResponse>('/salary/credit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCurrentSalary() {
+    return this.request<import('@/types').SalaryCreditResponse | null>('/salary/current');
+  }
 }
 
 export const api = new ApiClient();

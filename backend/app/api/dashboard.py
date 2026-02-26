@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.expense import Expense
 from app.models.couple import Couple, SharedExpense, SavingsGoal, Settlement
 from app.models.budget import Budget, Notification
+from app.models.salary import SalaryCredit
 from app.schemas.dashboard import (
     IndividualDashboard,
     CoupleDashboard,
@@ -152,8 +153,26 @@ def individual_dashboard(
     # Generate nudges
     _check_and_generate_nudges(current_user, month_expenses, db)
 
+    # Salary credit for current month
+    salary_record = (
+        db.query(SalaryCredit)
+        .filter(
+            and_(
+                SalaryCredit.user_id == current_user.id,
+                SalaryCredit.month == today.month,
+                SalaryCredit.year == today.year,
+            )
+        )
+        .first()
+    )
+
+    # Use credited salary as income if available, otherwise fallback to profile
+    effective_income = salary_record.amount if salary_record else total_income
+    savings_amount = effective_income - month_expenses
+    savings_rate = (savings_amount / effective_income * 100) if effective_income > 0 else 0
+
     return IndividualDashboard(
-        total_income=total_income,
+        total_income=effective_income,
         total_expenses=round(month_expenses, 2),
         savings_amount=round(savings_amount, 2),
         savings_rate=round(savings_rate, 1),
@@ -163,6 +182,9 @@ def individual_dashboard(
         budget_overview=budget_overview,
         previous_month_expenses=round(prev_month_expenses, 2),
         month_over_month_change=round(mom_change, 1),
+        salary_credited=salary_record is not None,
+        salary_amount=salary_record.amount if salary_record else None,
+        salary_credited_date=salary_record.credited_date if salary_record else None,
     )
 
 

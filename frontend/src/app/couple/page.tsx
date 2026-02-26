@@ -310,7 +310,7 @@ export default function CouplePage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-pulse text-lg text-mint-600">Loading couple mode...</div>
+          <div className="animate-pulse text-lg text-mint-600">Loading pool...</div>
         </div>
       </AppLayout>
     );
@@ -325,7 +325,7 @@ export default function CouplePage() {
       <AppLayout>
         <div className="max-w-lg mx-auto space-y-6 pb-20 md:pb-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Couple Mode</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Pool</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-2">
               Invite your partner to start tracking shared expenses together
             </p>
@@ -399,7 +399,7 @@ export default function CouplePage() {
       <div className="space-y-6 pb-24 md:pb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Couple Mode</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">👫 Pool</h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm">With {couple.partner_name} · {couple.partner_email}</p>
           </div>
         </div>

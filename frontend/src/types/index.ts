@@ -262,6 +262,9 @@ export interface IndividualDashboard {
   budget_overview: BudgetOverview[];
   previous_month_expenses: number;
   month_over_month_change: number;
+  salary_credited: boolean;
+  salary_amount: number | null;
+  salary_credited_date: string | null;
 }
 
 export interface CoupleDashboard {
@@ -387,4 +390,28 @@ export interface ReportsData {
   monthly_breakdown: MonthlyBreakdown[];
   spending_trends: TrendPoint[];
   budget_variance: BudgetVarianceItem[];
+}
+
+// ─── Salary ──────────────────────────────────────────────────────────────────
+
+export interface SalaryCheckResponse {
+  is_salary_day: boolean;
+  already_credited: boolean;
+  salary_date: number;
+  current_month: number;
+  current_year: number;
+}
+
+export interface SalaryCreditCreate {
+  amount: number;
+}
+
+export interface SalaryCreditResponse {
+  id: number;
+  user_id: number;
+  amount: number;
+  credited_date: string;
+  month: number;
+  year: number;
+  created_at: string;
 }
