@@ -12,6 +12,7 @@ from app.models.expense import Expense
 from app.models.couple import Couple, SharedExpense, SavingsGoal, Settlement
 from app.models.budget import Budget, Notification
 from app.models.salary import SalaryCredit
+from app.api.couple import calculate_split
 from app.schemas.dashboard import (
     IndividualDashboard,
     CoupleDashboard,
@@ -69,8 +70,6 @@ def individual_dashboard(
         mom_change = ((month_expenses - prev_month_expenses) / prev_month_expenses) * 100
 
     total_income = current_user.monthly_income
-    savings_amount = total_income - month_expenses
-    savings_rate = (savings_amount / total_income * 100) if total_income > 0 else 0
 
     # Days elapsed this month
     days_elapsed = today.day
@@ -226,8 +225,20 @@ def couple_dashboard(
     u1_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_1_id)
     u2_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_2_id)
 
-    # Net balance calculation
-    net = u1_paid - u2_paid  # positive = user1 paid more
+    # Net balance using split-based shares (consistent with /couple/balance)
+    user1_owes_total = 0.0
+    user2_owes_total = 0.0
+    for exp in expenses:
+        is_user1_payer = exp.paid_by_user_id == couple.user_1_id
+        u1_share, u2_share = calculate_split(
+            exp.amount, exp.split_type, exp.split_ratio, is_user1_payer
+        )
+        if is_user1_payer:
+            user2_owes_total += u2_share
+        else:
+            user1_owes_total += u1_share
+
+    net = user1_owes_total - user2_owes_total  # positive = user1 owes user2
 
     # Settlement totals
     settlements = db.query(Settlement).filter(Settlement.couple_id == couple.id).all()

@@ -11,7 +11,8 @@ from app.core.config import get_settings
 from app.models.user import User
 from app.models.expense import Expense, RecurringExpense
 from app.models.budget import Budget, Notification
-from app.models.couple import Couple, SharedExpense, Settlement, SavingsGoal, SavingsContribution
+from app.models.couple import Couple, SharedExpense, Settlement, SavingsGoal, SavingsContribution, JointAccount, JointAccountContribution, JointAccountTransaction
+from app.models.salary import SalaryCredit
 from app.schemas.user import UserCreate, UserLogin, UserUpdate, UserResponse, Token
 
 settings = get_settings()
@@ -21,6 +22,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
+    if len(user_data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
         raise HTTPException(
@@ -100,6 +103,9 @@ def delete_account(
     # Delete budgets
     db.query(Budget).filter(Budget.user_id == user_id).delete()
 
+    # Delete salary credits
+    db.query(SalaryCredit).filter(SalaryCredit.user_id == user_id).delete()
+
     # Delete expenses & recurring expenses
     db.query(Expense).filter(Expense.user_id == user_id).delete()
     db.query(RecurringExpense).filter(RecurringExpense.user_id == user_id).delete()
@@ -110,6 +116,13 @@ def delete_account(
     ).all()
 
     for couple in couples:
+        # Delete joint account data
+        joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+        if joint:
+            db.query(JointAccountTransaction).filter(JointAccountTransaction.joint_account_id == joint.id).delete()
+            db.query(JointAccountContribution).filter(JointAccountContribution.joint_account_id == joint.id).delete()
+            db.delete(joint)
+
         # Delete savings contributions for this couple's goals
         goals = db.query(SavingsGoal).filter(SavingsGoal.couple_id == couple.id).all()
         for goal in goals:
@@ -119,7 +132,10 @@ def delete_account(
         # Delete settlements
         db.query(Settlement).filter(Settlement.couple_id == couple.id).delete()
 
-        # Delete shared expenses
+        # Delete shared expenses (and related joint transactions first)
+        shared_expenses = db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id).all()
+        for se in shared_expenses:
+            db.query(JointAccountTransaction).filter(JointAccountTransaction.shared_expense_id == se.id).delete()
         db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id).delete()
 
         # Delete the couple record

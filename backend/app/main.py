@@ -38,7 +38,8 @@ app.add_middleware(
 )
 
 # Create tables (dev only — use Alembic in production)
-Base.metadata.create_all(bind=engine)
+if settings.DEBUG:
+    Base.metadata.create_all(bind=engine)
 
 # Register routers
 app.include_router(auth.router, prefix="/api")

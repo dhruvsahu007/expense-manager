@@ -32,39 +32,39 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-mint-600">💰 SplitMint</h1>
-          <p className="text-slate-500 mt-2">Track expenses. Split smart. Save more.</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-2">Track expenses. Split smart. Save more.</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-8 animate-slide-up">
-          <h2 className="text-2xl font-semibold text-slate-800 mb-6">Welcome back</h2>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 animate-slide-up">
+          <h2 className="text-2xl font-semibold text-slate-800 dark:text-white mb-6">Welcome back</h2>
 
           {error && (
-            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">
+            <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-mint-500 focus:ring-2 focus:ring-mint-200 outline-none transition"
+                className="w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-mint-500 focus:ring-2 focus:ring-mint-200 dark:focus:ring-mint-800 outline-none transition"
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-mint-500 focus:ring-2 focus:ring-mint-200 outline-none transition"
+                className="w-full px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-mint-500 focus:ring-2 focus:ring-mint-200 dark:focus:ring-mint-800 outline-none transition"
                 placeholder="••••••••"
               />
             </div>
@@ -78,9 +78,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-slate-500 mt-6">
+          <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-6">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-mint-600 font-medium hover:underline">
+            <Link href="/signup" className="text-mint-600 dark:text-mint-400 font-medium hover:underline">
               Sign up
             </Link>
           </p>

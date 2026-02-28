@@ -61,15 +61,32 @@ def get_partner_id(couple: Couple, user_id: int) -> int:
 def calculate_split(amount: float, split_type: str, split_ratio: str, paid_by_is_user1: bool):
     """Return (user1_share, user2_share)."""
     parts = split_ratio.split(":")
+    if len(parts) != 2:
+        half = amount / 2
+        return half, half
     if split_type == "equal":
         half = amount / 2
         return half, half
     elif split_type == "percentage":
-        p1 = float(parts[0]) / 100
-        p2 = float(parts[1]) / 100
-        return amount * p1, amount * p2
+        try:
+            p1 = float(parts[0])
+            p2 = float(parts[1])
+        except ValueError:
+            half = amount / 2
+            return half, half
+        # Validate percentages sum to 100
+        if abs((p1 + p2) - 100) > 0.01:
+            half = amount / 2
+            return half, half
+        return amount * p1 / 100, amount * p2 / 100
     elif split_type == "custom":
-        return float(parts[0]), float(parts[1])
+        try:
+            s1 = float(parts[0])
+            s2 = float(parts[1])
+        except ValueError:
+            half = amount / 2
+            return half, half
+        return s1, s2
     else:
         half = amount / 2
         return half, half
@@ -106,6 +123,23 @@ def invite_partner(
         raise HTTPException(status_code=404, detail="Partner not found. They must sign up first.")
     if partner.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot invite yourself")
+
+    # Check if partner is already in an active or pending couple
+    partner_couple = (
+        db.query(Couple)
+        .filter(
+            and_(
+                Couple.status.in_(["pending", "active"]),
+                or_(
+                    Couple.user_1_id == partner.id,
+                    Couple.user_2_id == partner.id,
+                ),
+            )
+        )
+        .first()
+    )
+    if partner_couple:
+        raise HTTPException(status_code=400, detail="Partner is already in a couple or has a pending invite")
 
     couple = Couple(
         user_1_id=current_user.id,
@@ -272,6 +306,9 @@ def create_shared_expense(
 ):
     """Log a shared expense. Optionally deduct from joint account."""
     couple = get_active_couple(current_user.id, db)
+
+    if expense_data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
 
     shared = SharedExpense(
         couple_id=couple.id,
@@ -515,6 +552,9 @@ def create_settlement(
     """Record a settlement payment."""
     couple = get_active_couple(current_user.id, db)
     partner_id = get_partner_id(couple, current_user.id)
+
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
 
     settlement = Settlement(
         couple_id=couple.id,
@@ -856,6 +896,9 @@ def create_savings_goal(
     """Create a joint savings goal."""
     couple = get_active_couple(current_user.id, db)
 
+    if goal_data.target_amount <= 0:
+        raise HTTPException(status_code=400, detail="Target amount must be positive")
+
     goal = SavingsGoal(
         couple_id=couple.id,
         title=goal_data.title,
@@ -896,6 +939,9 @@ def contribute_to_goal(
     )
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+
+    if contribution.amount <= 0:
+        raise HTTPException(status_code=400, detail="Contribution must be a positive amount")
 
     contrib = SavingsContribution(
         goal_id=goal.id,

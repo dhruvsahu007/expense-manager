@@ -46,6 +46,8 @@ def create_expense(
     db: Session = Depends(get_db),
 ):
     """Log a new personal expense."""
+    if expense_data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
     expense = Expense(
         user_id=current_user.id,
         amount=expense_data.amount,
@@ -86,10 +88,12 @@ def list_expenses(
     if end_date:
         query = query.filter(Expense.date <= end_date)
     if search:
+        # Escape LIKE wildcard characters
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.filter(
             or_(
-                Expense.description.ilike(f"%{search}%"),
-                Expense.category.ilike(f"%{search}%"),
+                Expense.description.ilike(f"%{escaped}%"),
+                Expense.category.ilike(f"%{escaped}%"),
             )
         )
     if min_amount is not None:
@@ -170,6 +174,8 @@ def update_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
 
     if expense_data.amount is not None:
+        if expense_data.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
         expense.amount = expense_data.amount
     if expense_data.category is not None:
         expense.category = expense_data.category
@@ -213,14 +219,23 @@ def _compute_next_date(frequency: str, day_of_month: int = 1, day_of_week: int |
     if frequency == "weekly":
         dow = day_of_week if day_of_week is not None else 0
         days_ahead = (dow - ref.weekday()) % 7
-        if days_ahead == 0 and after:
-            days_ahead = 7
-        return ref + timedelta(days=days_ahead or 7)
+        if days_ahead == 0:
+            # On creation (no after), schedule for today; after processing, skip to next week
+            days_ahead = 7 if after else 0
+        return ref + timedelta(days=days_ahead)
     elif frequency == "yearly":
+        # Use day_of_month to determine the target day each year
+        target_month = ref.month
+        target_day = min(day_of_month, 28)
         try:
-            next_d = date(ref.year, ref.month, ref.day).replace(year=ref.year + 1)
+            next_d = date(ref.year, target_month, target_day)
         except ValueError:
-            next_d = date(ref.year + 1, ref.month, 28)
+            next_d = date(ref.year, target_month, 28)
+        if next_d <= ref:
+            try:
+                next_d = date(ref.year + 1, target_month, target_day)
+            except ValueError:
+                next_d = date(ref.year + 1, target_month, 28)
         return next_d
     else:  # monthly
         day = min(day_of_month, 28)
@@ -245,6 +260,8 @@ def create_recurring_expense(
     db: Session = Depends(get_db),
 ):
     """Create a recurring expense template."""
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
     next_d = _compute_next_date(data.frequency, data.day_of_month, data.day_of_week)
 
     rec = RecurringExpense(
@@ -383,7 +400,6 @@ def process_recurring_expenses(
         # Check end_date
         if rec.end_date and today > rec.end_date:
             rec.is_active = False
-            db.commit()
             continue
 
         # Create expense for the due date
@@ -401,7 +417,9 @@ def process_recurring_expenses(
 
         # Advance next_date
         rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week, after=rec.next_date)
-        db.commit()
         created += 1
+
+    # Batch commit all changes at once for atomicity
+    db.commit()
 
     return {"processed": created, "message": f"{created} recurring expenses created"}

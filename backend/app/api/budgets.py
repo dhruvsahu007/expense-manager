@@ -22,6 +22,8 @@ def create_budget(
     db: Session = Depends(get_db),
 ):
     """Set a monthly budget for a category."""
+    if budget_data.monthly_limit <= 0:
+        raise HTTPException(status_code=400, detail="Monthly limit must be positive")
     existing = (
         db.query(Budget)
         .filter(
@@ -76,6 +78,8 @@ def update_budget(
         raise HTTPException(status_code=404, detail="Budget not found")
 
     if budget_data.monthly_limit is not None:
+        if budget_data.monthly_limit <= 0:
+            raise HTTPException(status_code=400, detail="Monthly limit must be positive")
         budget.monthly_limit = budget_data.monthly_limit
 
     db.commit()

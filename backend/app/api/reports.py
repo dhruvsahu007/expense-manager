@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -64,8 +64,13 @@ def get_reports(
     """Return monthly breakdown, spending trends, and budget variance."""
 
     today = date.today()
-    start_month = date(today.year, today.month, 1) - timedelta(days=(months - 1) * 30)
-    start_month = date(start_month.year, start_month.month, 1)
+    # Precisely calculate the start month by subtracting months
+    start_year = today.year
+    start_month_num = today.month - (months - 1)
+    while start_month_num <= 0:
+        start_month_num += 12
+        start_year -= 1
+    start_month = date(start_year, start_month_num, 1)
 
     # Fetch all expenses in window
     expenses = (
