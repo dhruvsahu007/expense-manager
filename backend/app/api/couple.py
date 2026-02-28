@@ -310,6 +310,17 @@ def create_shared_expense(
     if expense_data.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
 
+    # Validate split ratio format and values
+    parts = expense_data.split_ratio.split(":")
+    if len(parts) != 2:
+        raise HTTPException(status_code=422, detail="Split ratio must be in format 'X:Y'")
+    try:
+        p1, p2 = float(parts[0]), float(parts[1])
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Split ratio values must be numeric")
+    if expense_data.split_type == "percentage" and abs((p1 + p2) - 100) > 0.01:
+        raise HTTPException(status_code=422, detail=f"Percentage split must sum to 100, got {p1 + p2}")
+
     shared = SharedExpense(
         couple_id=couple.id,
         paid_by_user_id=current_user.id,

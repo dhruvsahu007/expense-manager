@@ -138,6 +138,9 @@ def delete_account(
             db.query(JointAccountTransaction).filter(JointAccountTransaction.shared_expense_id == se.id).delete()
         db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id).delete()
 
+        # Flush to satisfy FK constraints before deleting the couple record
+        db.flush()
+
         # Delete the couple record
         db.delete(couple)
 
