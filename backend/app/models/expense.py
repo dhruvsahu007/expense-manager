@@ -4,6 +4,17 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Dat
 from app.core.database import Base
 
 
+class UserCategory(Base):
+    __tablename__ = "user_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    icon = Column(String(10), nullable=False, default="📌")
+    color = Column(String(10), nullable=False, default="#6b7280")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class Expense(Base):
     __tablename__ = "expenses"
 

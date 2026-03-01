@@ -2,18 +2,20 @@
 
 import AppLayout from '@/components/AppLayout';
 import { api } from '@/lib/api';
-import { formatCurrency, CATEGORY_ICONS } from '@/lib/utils';
+import { formatCurrency, getCategoryIcon } from '@/lib/utils';
 import { PencilIcon, TrashIcon, PlusIcon, CheckIcon, XMarkIcon } from '@/lib/icons';
-import { Budget } from '@/types';
+import { Budget, Category } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-
-const CATEGORIES = ['Food', 'Rent', 'Utilities', 'Travel', 'Shopping', 'Subscriptions', 'EMI', 'Entertainment', 'Health', 'Other'];
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const categoryNames = categories.map(c => c.name);
+  const catIcon = (name: string) => getCategoryIcon(name, categories);
 
   const [category, setCategory] = useState('Food');
   const [limit, setLimit] = useState('');
@@ -31,6 +33,7 @@ export default function BudgetsPage() {
   };
 
   useEffect(() => { loadBudgets(); }, []);
+  useEffect(() => { api.getCategories().then(setCategories).catch(() => {}); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +86,7 @@ export default function BudgetsPage() {
 
   // Available categories (not yet budgeted)
   const budgetedCategories = budgets.map(b => b.category);
-  const availableCategories = CATEGORIES.filter(c => !budgetedCategories.includes(c));
+  const availableCategories = categoryNames.filter(c => !budgetedCategories.includes(c));
 
   return (
     <AppLayout>
@@ -165,7 +168,7 @@ export default function BudgetsPage() {
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white focus:border-mint-500 outline-none"
                 >
-                  {availableCategories.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                  {availableCategories.map((c) => <option key={c} value={c}>{catIcon(c)} {c}</option>)}
                 </select>
               </div>
               <div className="flex-1">
@@ -212,7 +215,7 @@ export default function BudgetsPage() {
               const percentUsed = budget.percent_used || 0;
               const isWarning = percentUsed >= 80 && percentUsed < 100;
               const isOver = percentUsed >= 100;
-              const icon = CATEGORY_ICONS[budget.category] || '📦';
+              const icon = catIcon(budget.category);
 
               return (
                 <div key={budget.id} className={`bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border-l-4 ${

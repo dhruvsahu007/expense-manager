@@ -11,32 +11,92 @@ from sqlalchemy import and_, or_
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.models.expense import Expense, RecurringExpense
+from app.models.expense import Expense, RecurringExpense, UserCategory
 from app.schemas.expense import (
     ExpenseCreate, ExpenseUpdate, ExpenseResponse,
     RecurringExpenseCreate, RecurringExpenseUpdate, RecurringExpenseResponse,
+    CategoryCreate, CategoryResponse,
 )
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 DEFAULT_CATEGORIES = [
-    "Food",
-    "Rent",
-    "Utilities",
-    "Travel",
-    "Shopping",
-    "Subscriptions",
-    "EMI",
-    "Entertainment",
-    "Health",
-    "Other",
+    {"name": "Food", "icon": "🍔", "color": "#f97316"},
+    {"name": "Rent", "icon": "🏠", "color": "#8b5cf6"},
+    {"name": "Utilities", "icon": "💡", "color": "#06b6d4"},
+    {"name": "Travel", "icon": "✈️", "color": "#ec4899"},
+    {"name": "Shopping", "icon": "🛒", "color": "#f59e0b"},
+    {"name": "Subscriptions", "icon": "📱", "color": "#6366f1"},
+    {"name": "EMI", "icon": "🏦", "color": "#ef4444"},
+    {"name": "Entertainment", "icon": "🎬", "color": "#14b8a6"},
+    {"name": "Health", "icon": "🏥", "color": "#22c55e"},
+    {"name": "Other", "icon": "📦", "color": "#94a3b8"},
 ]
 
 
-@router.get("/categories", response_model=List[str])
-def get_categories():
-    """Get default expense categories."""
-    return DEFAULT_CATEGORIES
+@router.get("/categories", response_model=List[CategoryResponse])
+def get_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get default + user custom categories."""
+    defaults = [
+        CategoryResponse(name=c["name"], icon=c["icon"], color=c["color"], is_default=True)
+        for c in DEFAULT_CATEGORIES
+    ]
+    custom = db.query(UserCategory).filter(UserCategory.user_id == current_user.id).all()
+    customs = [
+        CategoryResponse(id=c.id, name=c.name, icon=c.icon, color=c.color, is_default=False)
+        for c in custom
+    ]
+    return defaults + customs
+
+
+@router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_category(
+    data: CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Add a custom category."""
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Category name cannot be empty")
+    if len(name) > 50:
+        raise HTTPException(status_code=400, detail="Category name too long (max 50)")
+    # Check duplicate against defaults
+    default_names = [c["name"].lower() for c in DEFAULT_CATEGORIES]
+    if name.lower() in default_names:
+        raise HTTPException(status_code=400, detail="Category already exists as a default")
+    # Check duplicate against user's custom
+    existing = db.query(UserCategory).filter(
+        UserCategory.user_id == current_user.id,
+        UserCategory.name.ilike(name),
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have this category")
+    cat = UserCategory(user_id=current_user.id, name=name, icon=data.icon, color=data.color)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return CategoryResponse(id=cat.id, name=cat.name, icon=cat.icon, color=cat.color, is_default=False)
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a custom category."""
+    cat = db.query(UserCategory).filter(
+        UserCategory.id == category_id,
+        UserCategory.user_id == current_user.id,
+    ).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    db.delete(cat)
+    db.commit()
 
 
 @router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)

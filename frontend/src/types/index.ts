@@ -62,6 +62,22 @@ export interface ExpenseUpdate {
   description?: string;
 }
 
+// ─── Category ────────────────────────────────────────────────────────────────
+
+export interface Category {
+  name: string;
+  icon: string;
+  color: string;
+  is_default: boolean;
+  id?: number | null;
+}
+
+export interface CategoryCreate {
+  name: string;
+  icon: string;
+  color: string;
+}
+
 // ─── Recurring Expense ───────────────────────────────────────────────────────
 
 export interface RecurringExpense {

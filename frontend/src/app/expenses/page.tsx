@@ -2,13 +2,12 @@
 
 import AppLayout from '@/components/AppLayout';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, CATEGORY_ICONS } from '@/lib/utils';
+import { formatCurrency, formatDate, getCategoryIcon, getCategoryColor } from '@/lib/utils';
 import { PencilIcon, TrashIcon, FunnelIcon, ArrowsUpDownIcon, MagnifyingGlassIcon, XMarkIcon, PlusIcon, CheckIcon, ArrowDownTrayIcon, ArrowPathIcon, PauseIcon, PlayIcon } from '@/lib/icons';
-import { Expense, RecurringExpense } from '@/types';
+import { Expense, RecurringExpense, Category } from '@/types';
 import { useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 
-const CATEGORIES = ['Food', 'Rent', 'Utilities', 'Travel', 'Shopping', 'Subscriptions', 'EMI', 'Entertainment', 'Health', 'Other'];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 type SortOption = 'recent' | 'oldest' | 'high' | 'low';
@@ -25,6 +24,20 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState<'expenses' | 'recurring'>('expenses');
+
+  // Categories (dynamic from API)
+  const [categories, setCategories] = useState<Category[]>([]);
+  const categoryNames = categories.map(c => c.name);
+  const catIcon = (name: string) => getCategoryIcon(name, categories);
+
+  // Manage custom categories
+  const [showManageCategories, setShowManageCategories] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('📌');
+  const [newCatColor, setNewCatColor] = useState('#6b7280');
+
+  const EMOJI_PICKER = ['📌', '🎓', '🐾', '🏋️', '🚗', '☕', '🎁', '💼', '🎮', '🏖️', '👶', '💇', '🧹', '📚', '🍕', '🎵', '💊', '🔧'];
+  const COLOR_PICKER = ['#6b7280', '#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#94a3b8'];
 
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -77,6 +90,32 @@ export default function ExpensesPage() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  const loadCategories = () => {
+    api.getCategories().then(setCategories).catch(() => {});
+  };
+
+  useEffect(() => { loadCategories(); }, []);
+
+  const handleAddCategory = async () => {
+    const name = newCatName.trim();
+    if (!name) return;
+    try {
+      await api.createCategory({ name, icon: newCatIcon, color: newCatColor });
+      toast.success(`Category "${name}" added!`);
+      setNewCatName(''); setNewCatIcon('📌'); setNewCatColor('#6b7280');
+      loadCategories();
+    } catch { toast.error('Failed to add category'); }
+  };
+
+  const handleDeleteCategory = async (id: number, name: string) => {
+    if (!confirm(`Delete custom category "${name}"? Existing expenses with this category will keep their label.`)) return;
+    try {
+      await api.deleteCategory(id);
+      toast.success('Category deleted');
+      loadCategories();
+    } catch { toast.error('Failed to delete'); }
+  };
 
   const loadExpenses = () => {
     const params: Record<string, string | number | undefined> = {};
@@ -240,7 +279,7 @@ export default function ExpensesPage() {
           </button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
           <button onClick={() => setTab('expenses')}
             className={'px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ' + (tab === 'expenses' ? 'bg-mint-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border dark:border-slate-700')}>
             💸 Expenses
@@ -249,7 +288,74 @@ export default function ExpensesPage() {
             className={'px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ' + (tab === 'recurring' ? 'bg-mint-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border dark:border-slate-700')}>
             <ArrowPathIcon size={14} /> Recurring ({recurringExpenses.length})
           </button>
+          <button onClick={() => setShowManageCategories(!showManageCategories)}
+            className={'ml-auto px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ' + (showManageCategories ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border dark:border-slate-700')}>
+            🏷️ <span className="hidden sm:inline">Categories</span>
+          </button>
         </div>
+
+        {showManageCategories && (
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm animate-slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Manage Categories</h3>
+              <button onClick={() => setShowManageCategories(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                <XMarkIcon size={18} />
+              </button>
+            </div>
+
+            {/* Add new category */}
+            <div className="flex flex-wrap gap-3 items-end mb-5 pb-5 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Name</label>
+                <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="e.g. Groceries"
+                  maxLength={50}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm focus:border-mint-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Icon</label>
+                <div className="flex flex-wrap gap-1 max-w-[220px]">
+                  {EMOJI_PICKER.map(e => (
+                    <button key={e} type="button" onClick={() => setNewCatIcon(e)}
+                      className={'w-8 h-8 rounded-lg text-lg flex items-center justify-center transition ' + (newCatIcon === e ? 'bg-mint-100 dark:bg-mint-900/40 ring-2 ring-mint-500' : 'hover:bg-slate-100 dark:hover:bg-slate-700')}>
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Color</label>
+                <div className="flex flex-wrap gap-1">
+                  {COLOR_PICKER.map(c => (
+                    <button key={c} type="button" onClick={() => setNewCatColor(c)}
+                      className={'w-7 h-7 rounded-full transition ' + (newCatColor === c ? 'ring-2 ring-offset-2 ring-mint-500 dark:ring-offset-slate-800' : '')}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              <button onClick={handleAddCategory} disabled={!newCatName.trim()}
+                className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700 transition disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap">
+                <PlusIcon size={14} /> Add
+              </button>
+            </div>
+
+            {/* Category list */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {categories.map(cat => (
+                <div key={cat.is_default ? cat.name : cat.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50">
+                  <span className="text-lg">{cat.icon}</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">{cat.name}</span>
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                  {!cat.is_default && cat.id && (
+                    <button onClick={() => handleDeleteCategory(cat.id!, cat.name)}
+                      className="text-slate-400 hover:text-red-500 transition shrink-0">
+                      <XMarkIcon size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {tab === 'expenses' && (
           <>
@@ -273,13 +379,13 @@ export default function ExpensesPage() {
                         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Filter by Category</span>
                         {selectedCategories.length > 0 && <button onClick={() => setSelectedCategories([])} className="text-xs text-red-500 hover:text-red-600">Clear</button>}
                       </div>
-                      {CATEGORIES.map((cat) => (
+                      {categoryNames.map((cat) => (
                         <button key={cat} onClick={() => toggleCategoryFilter(cat)}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition text-left">
                           <span className={'w-4 h-4 rounded border flex items-center justify-center text-white ' + (selectedCategories.includes(cat) ? 'bg-mint-600 border-mint-600' : 'border-slate-300 dark:border-slate-600')}>
                             {selectedCategories.includes(cat) && <CheckIcon size={10} />}
                           </span>
-                          <span>{CATEGORY_ICONS[cat]}</span>
+                          <span>{catIcon(cat)}</span>
                           <span className="text-slate-700 dark:text-slate-300">{cat}</span>
                         </button>
                       ))}
@@ -353,7 +459,7 @@ export default function ExpensesPage() {
                   <span className="text-xs text-slate-400 dark:text-slate-500">Active:</span>
                   {selectedCategories.map(cat => (
                     <span key={cat} className="inline-flex items-center gap-1 bg-mint-50 dark:bg-mint-900/30 text-mint-700 dark:text-mint-400 text-xs px-2 py-1 rounded-full">
-                      {CATEGORY_ICONS[cat]} {cat}
+                      {catIcon(cat)} {cat}
                       <button onClick={() => toggleCategoryFilter(cat)} className="hover:text-red-500"><XMarkIcon size={10} /></button>
                     </span>
                   ))}
@@ -381,7 +487,7 @@ export default function ExpensesPage() {
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Category</label>
                       <select value={category} onChange={(e) => setCategory(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white focus:border-mint-500 outline-none">
-                        {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                        {categoryNames.map((c) => <option key={c} value={c}>{catIcon(c)} {c}</option>)}
                       </select>
                     </div>
                   </div>
@@ -429,7 +535,7 @@ export default function ExpensesPage() {
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm" placeholder="Amount" />
                           <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm">
-                            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            {categoryNames.map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -450,7 +556,7 @@ export default function ExpensesPage() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl">{CATEGORY_ICONS[expense.category] || '📦'}</span>
+                          <span className="text-2xl">{catIcon(expense.category)}</span>
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-slate-800 dark:text-white">{expense.category}</p>
@@ -513,7 +619,7 @@ export default function ExpensesPage() {
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Category</label>
                       <select value={recCategory} onChange={(e) => setRecCategory(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white focus:border-mint-500 outline-none">
-                        {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        {categoryNames.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>
@@ -581,7 +687,7 @@ export default function ExpensesPage() {
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm" placeholder="Amount" />
                           <select value={editRecCategory} onChange={(e) => setEditRecCategory(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm">
-                            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            {categoryNames.map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -617,7 +723,7 @@ export default function ExpensesPage() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl">{CATEGORY_ICONS[rec.category] || '📦'}</span>
+                          <span className="text-2xl">{catIcon(rec.category)}</span>
                           <div>
                             <p className="font-medium text-slate-800 dark:text-white">{rec.category}</p>
                             <p className="text-xs text-slate-400">

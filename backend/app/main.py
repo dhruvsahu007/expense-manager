@@ -7,7 +7,7 @@ from app.api import auth, expenses, couple, budgets, dashboard, reports, salary
 
 # Import all models so they register with Base
 from app.models import user, expense, couple as couple_models, budget  # noqa
-from app.models.expense import RecurringExpense  # noqa
+from app.models.expense import RecurringExpense, UserCategory  # noqa
 from app.models.couple import Settlement  # noqa
 from app.models.salary import SalaryCredit  # noqa
 

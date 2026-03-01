@@ -79,7 +79,18 @@ class ApiClient {
   // ─── Expenses ────────────────────────────────────────────────────────────
 
   async getCategories() {
-    return this.request<string[]>('/expenses/categories');
+    return this.request<import('@/types').Category[]>('/expenses/categories');
+  }
+
+  async createCategory(data: import('@/types').CategoryCreate) {
+    return this.request<import('@/types').Category>('/expenses/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCategory(id: number) {
+    return this.request<null>(`/expenses/categories/${id}`, { method: 'DELETE' });
   }
 
   async createExpense(data: import('@/types').ExpenseCreate) {

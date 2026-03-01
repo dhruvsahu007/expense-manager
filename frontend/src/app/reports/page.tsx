@@ -2,8 +2,8 @@
 
 import AppLayout from '@/components/AppLayout';
 import { api } from '@/lib/api';
-import { formatCurrency, CATEGORY_COLORS, CATEGORY_ICONS } from '@/lib/utils';
-import { ReportsData } from '@/types';
+import { formatCurrency, CATEGORY_COLORS, getCategoryIcon, getCategoryColor } from '@/lib/utils';
+import { ReportsData, Category } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -18,6 +18,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(6);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const catIcon = (name: string) => getCategoryIcon(name, categories);
+  const catColor = (name: string) => getCategoryColor(name, categories);
 
   const loadReports = () => {
     setLoading(true);
@@ -34,6 +37,7 @@ export default function ReportsPage() {
   };
 
   useEffect(() => { loadReports(); }, [months]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { api.getCategories().then(setCategories).catch(() => {}); }, []);
 
   const currentBreakdown = data?.monthly_breakdown.find(m => m.month === selectedMonth);
 
@@ -181,7 +185,7 @@ export default function ReportsPage() {
                       label={({ category, percentage }) => `${category} ${percentage}%`}
                     >
                       {currentBreakdown.categories.map((c, i) => (
-                        <Cell key={c.category} fill={CATEGORY_COLORS[c.category] || COLORS[i % COLORS.length]} />
+                        <Cell key={c.category} fill={catColor(c.category)} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
@@ -194,7 +198,7 @@ export default function ReportsPage() {
                 {currentBreakdown.categories.map((cat) => (
                   <div key={cat.category} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{CATEGORY_ICONS[cat.category] || '📦'}</span>
+                      <span className="text-lg">{catIcon(cat.category)}</span>
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{cat.category}</span>
                     </div>
                     <div className="text-right">
@@ -230,7 +234,7 @@ export default function ReportsPage() {
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Legend />
                   {cats.map((cat, i) => (
-                    <Bar key={cat} dataKey={cat} stackId="a" fill={CATEGORY_COLORS[cat] || COLORS[i % COLORS.length]} />
+                    <Bar key={cat} dataKey={cat} stackId="a" fill={catColor(cat)} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -250,7 +254,7 @@ export default function ReportsPage() {
                   <div key={item.category}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span>{CATEGORY_ICONS[item.category] || '📦'}</span>
+                        <span>{catIcon(item.category)}</span>
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.category}</span>
                       </div>
                       <div className="text-right text-sm">

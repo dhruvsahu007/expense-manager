@@ -3,13 +3,12 @@
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, CATEGORY_ICONS } from '@/lib/utils';
+import { formatCurrency, formatDate, getCategoryIcon } from '@/lib/utils';
 import { PencilIcon, TrashIcon, XMarkIcon } from '@/lib/icons';
-import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary } from '@/types';
+import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary, Category } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
-const CATEGORIES = ['Food', 'Rent', 'Utilities', 'Travel', 'Shopping', 'Subscriptions', 'EMI', 'Entertainment', 'Health', 'Other'];
 const CONTRIBUTION_TYPES = ['salary', 'bonus', 'savings', 'other'];
 
 export default function CouplePage() {
@@ -23,6 +22,11 @@ export default function CouplePage() {
   const [jointSummary, setJointSummary] = useState<JointAccountSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'expenses' | 'settlements' | 'goals' | 'joint'>('expenses');
+
+  // Dynamic categories
+  const [categories, setCategories] = useState<Category[]>([]);
+  const categoryNames = categories.map(c => c.name);
+  const catIcon = (name: string) => getCategoryIcon(name, categories);
 
   // Invite form
   const [partnerEmail, setPartnerEmail] = useState('');
@@ -107,7 +111,7 @@ export default function CouplePage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); api.getCategories().then(setCategories).catch(() => {}); }, []);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -527,7 +531,7 @@ export default function CouplePage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
                       <select value={seCategory} onChange={(e) => setSeCategory(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none">
-                        {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                        {categoryNames.map((c) => <option key={c} value={c}>{catIcon(c)} {c}</option>)}
                       </select>
                     </div>
                   </div>
@@ -634,7 +638,7 @@ export default function CouplePage() {
                             <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
                             <select value={editExpCategory} onChange={(e) => setEditExpCategory(e.target.value)}
                               className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none">
-                              {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                              {categoryNames.map((c) => <option key={c} value={c}>{catIcon(c)} {c}</option>)}
                             </select>
                           </div>
                         </div>
@@ -688,7 +692,7 @@ export default function CouplePage() {
                       /* ─── Display Mode ─── */
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="text-2xl">{CATEGORY_ICONS[exp.category] || '📦'}</span>
+                          <span className="text-2xl">{catIcon(exp.category)}</span>
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-slate-800">{exp.description || exp.category}</p>

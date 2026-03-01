@@ -10,8 +10,9 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { CATEGORY_COLORS, CATEGORY_ICONS } from '@/lib/utils';
+import { CATEGORY_COLORS, getCategoryIcon, getCategoryColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { Category } from '@/types';
 
 const COLORS = ['#f97316', '#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#6366f1', '#ef4444', '#14b8a6', '#22c55e', '#94a3b8'];
 
@@ -19,6 +20,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [data, setData] = useState<IndividualDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const catIcon = (name: string) => getCategoryIcon(name, categories);
+  const catColor = (name: string) => getCategoryColor(name, categories);
 
   // Salary modal state
   const [showSalaryModal, setShowSalaryModal] = useState(false);
@@ -34,6 +38,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
+    api.getCategories().then(setCategories).catch(() => {});
 
     // Check if salary needs to be credited
     api.checkSalary()
@@ -153,7 +158,7 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Budget Overview</h3>
                 <div className="space-y-3">
                   {data.budget_overview.map((b: BudgetOverview) => {
-                    const icon = CATEGORY_ICONS[b.category] || '📦';
+                    const icon = catIcon(b.category);
                     const isOver = b.status === 'over';
                     const isWarning = b.status === 'warning';
                     return (
@@ -206,7 +211,7 @@ export default function DashboardPage() {
                         {data.category_breakdown.map((entry, index) => (
                           <Cell
                             key={entry.category}
-                            fill={CATEGORY_COLORS[entry.category] || COLORS[index % COLORS.length]}
+                            fill={catColor(entry.category)}
                           />
                         ))}
                       </Pie>

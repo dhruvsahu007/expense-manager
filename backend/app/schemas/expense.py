@@ -5,6 +5,24 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 
+# --- Categories ---
+class CategoryCreate(BaseModel):
+    name: str
+    icon: str = "📌"
+    color: str = "#6b7280"
+
+
+class CategoryResponse(BaseModel):
+    name: str
+    icon: str
+    color: str
+    is_default: bool = True
+    id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ExpenseCreate(BaseModel):
     amount: float
     category: str

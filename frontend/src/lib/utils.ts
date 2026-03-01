@@ -46,3 +46,15 @@ export const CATEGORY_ICONS: Record<string, string> = {
   Health: '🏥',
   Other: '📦',
 };
+
+export function getCategoryIcon(category: string, categories?: import('@/types').Category[]): string {
+  if (CATEGORY_ICONS[category]) return CATEGORY_ICONS[category];
+  const found = categories?.find(c => c.name === category);
+  return found?.icon || '📌';
+}
+
+export function getCategoryColor(category: string, categories?: import('@/types').Category[]): string {
+  if (CATEGORY_COLORS[category]) return CATEGORY_COLORS[category];
+  const found = categories?.find(c => c.name === category);
+  return found?.color || '#6b7280';
+}
