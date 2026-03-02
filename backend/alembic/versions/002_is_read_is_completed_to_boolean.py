@@ -1,6 +1,6 @@
 """Convert is_read and is_completed from Integer to Boolean
 
-Revision ID: 002_is_read_is_completed_to_boolean
+Revision ID: 002_bool_columns
 Revises: 001_add_user_categories
 Create Date: 2026-03-03 00:00:00.000000
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers
-revision: str = "002_is_read_is_completed_to_boolean"
+revision: str = "002_bool_columns"
 down_revision: Union[str, None] = "001_add_user_categories"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
