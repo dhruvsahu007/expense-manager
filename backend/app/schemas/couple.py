@@ -64,6 +64,7 @@ class SharedExpenseResponse(BaseModel):
 
 class BalanceSummary(BaseModel):
     total_shared: float
+    total_joint: float = 0.0
     user_1_paid: float
     user_2_paid: float
     user_1_owes: float

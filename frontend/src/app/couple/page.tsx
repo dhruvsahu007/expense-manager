@@ -645,7 +645,7 @@ export default function CouplePage() {
         {balance && (
           <div className="bg-gradient-to-r from-mint-500 to-emerald-600 rounded-xl p-5 text-white">
             <p className="text-sm opacity-80">Total Shared Expenses</p>
-            <p className="text-3xl font-bold mt-1">{formatCurrency(balance.total_shared)}</p>
+            <p className="text-3xl font-bold mt-1">{formatCurrency(balance.total_shared + (balance.total_joint || 0))}</p>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
                 <p className="text-sm opacity-80">{balance.user_1_name || 'Partner 1'} paid</p>
@@ -656,6 +656,12 @@ export default function CouplePage() {
                 <p className="text-lg font-semibold">{formatCurrency(balance.user_2_paid)}</p>
               </div>
             </div>
+            {(balance.total_joint || 0) > 0 && (
+              <div className="mt-3 pt-3 border-t border-white/20">
+                <p className="text-sm opacity-80">💰 Paid from Joint Account</p>
+                <p className="text-lg font-semibold">{formatCurrency(balance.total_joint)}</p>
+              </div>
+            )}
 
             {/* Net Balance with settlements */}
             <div className="mt-4 pt-3 border-t border-white/20 space-y-2">

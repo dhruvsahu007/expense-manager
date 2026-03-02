@@ -167,6 +167,7 @@ export interface SharedExpenseUpdate {
 
 export interface BalanceSummary {
   total_shared: number;
+  total_joint: number;
   user_1_paid: number;
   user_2_paid: number;
   user_1_owes: number;

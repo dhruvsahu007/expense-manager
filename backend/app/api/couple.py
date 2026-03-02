@@ -570,14 +570,12 @@ def get_balance(
     user2_paid = 0.0
     user1_owes_total = 0.0
     user2_owes_total = 0.0
+    total_joint = 0.0
 
     for exp in expenses:
-        # Joint-paid expenses come from the common account — no individual owes
+        # Joint-paid expenses come from the shared pool — skip from personal balance
         if exp.paid_from_joint:
-            if exp.paid_by_user_id == couple.user_1_id:
-                user1_paid += exp.amount
-            else:
-                user2_paid += exp.amount
+            total_joint += exp.amount
             continue
 
         is_user1_payer = exp.paid_by_user_id == couple.user_1_id
@@ -614,6 +612,7 @@ def get_balance(
 
     return BalanceSummary(
         total_shared=user1_paid + user2_paid,
+        total_joint=total_joint,
         user_1_paid=user1_paid,
         user_2_paid=user2_paid,
         user_1_owes=user1_owes_total,
