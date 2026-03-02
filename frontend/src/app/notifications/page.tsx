@@ -10,9 +10,28 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Read notification preferences from localStorage (set in Settings page)
+  const getNotifPref = (key: string): boolean => {
+    if (typeof window !== 'undefined') {
+      const val = localStorage.getItem(`notif_${key}`);
+      return val === null ? true : val === 'true';
+    }
+    return true;
+  };
+
+  const filterByPrefs = (items: Notification[]): Notification[] => {
+    return items.filter(n => {
+      if (n.notification_type === 'budget_warning' && !getNotifPref('budget_warning')) return false;
+      if (n.notification_type === 'savings_alert' && !getNotifPref('savings_alert')) return false;
+      if (n.notification_type === 'imbalance_alert' && !getNotifPref('imbalance_alert')) return false;
+      if (n.notification_type === 'monthly_summary' && !getNotifPref('monthly_summary')) return false;
+      return true;
+    });
+  };
+
   const loadNotifications = () => {
     api.getNotifications()
-      .then(setNotifications)
+      .then(data => setNotifications(filterByPrefs(data)))
       .catch(() => toast.error('Failed to load notifications'))
       .finally(() => setLoading(false));
   };

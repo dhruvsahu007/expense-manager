@@ -197,6 +197,11 @@ export interface SettlementCreate {
   note?: string;
 }
 
+export interface SettlementUpdate {
+  amount?: number;
+  note?: string;
+}
+
 // ─── Savings ─────────────────────────────────────────────────────────────────
 
 export interface SavingsGoal {
@@ -206,7 +211,7 @@ export interface SavingsGoal {
   target_amount: number;
   current_amount: number;
   deadline: string | null;
-  is_completed: number;
+  is_completed: boolean;
   percent_complete?: number;
   monthly_contribution_needed?: number;
   created_at: string;
@@ -310,7 +315,7 @@ export interface Notification {
   title: string;
   message: string;
   notification_type: string;
-  is_read: number;
+  is_read: boolean;
   created_at: string;
 }
 
@@ -346,6 +351,13 @@ export interface JointAccountContributionCreate {
   contribution_type: string;
   note?: string;
   date: string;
+}
+
+export interface JointAccountContributionUpdate {
+  amount?: number;
+  contribution_type?: string;
+  note?: string;
+  date?: string;
 }
 
 export interface JointAccountTransaction {

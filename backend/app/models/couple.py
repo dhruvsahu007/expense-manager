@@ -51,7 +51,7 @@ class SavingsGoal(Base):
     target_amount = Column(Float, nullable=False)
     current_amount = Column(Float, default=0.0)
     deadline = Column(Date, nullable=True)
-    is_completed = Column(Integer, default=0)
+    is_completed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

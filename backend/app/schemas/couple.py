@@ -81,6 +81,11 @@ class SettlementCreate(BaseModel):
     note: Optional[str] = None
 
 
+class SettlementUpdate(BaseModel):
+    amount: Optional[float] = None
+    note: Optional[str] = None
+
+
 class SettlementResponse(BaseModel):
     id: int
     couple_id: int
@@ -110,7 +115,7 @@ class SavingsGoalResponse(BaseModel):
     target_amount: float
     current_amount: float
     deadline: Optional[Date]
-    is_completed: int
+    is_completed: bool
     percent_complete: Optional[float] = None
     monthly_contribution_needed: Optional[float] = None
     created_at: datetime
@@ -158,6 +163,13 @@ class JointAccountContributionCreate(BaseModel):
     contribution_type: str = "salary"  # salary / bonus / savings / other / withdrawal
     note: Optional[str] = None
     date: Date
+
+
+class JointAccountContributionUpdate(BaseModel):
+    amount: Optional[float] = None
+    contribution_type: Optional[str] = None
+    note: Optional[str] = None
+    date: Optional[Date] = None
 
 
 class JointAccountContributionResponse(BaseModel):

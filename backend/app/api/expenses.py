@@ -273,7 +273,7 @@ def delete_expense(
 # ─── Recurring Expenses ──────────────────────────────────────────────────────
 
 
-def _compute_next_date(frequency: str, day_of_month: int = 1, day_of_week: int | None = None, after: date | None = None) -> date:
+def _compute_next_date(frequency: str, day_of_month: int = 1, day_of_week: int | None = None, after: date | None = None, start_month: int | None = None) -> date:
     """Compute the next occurrence date for a recurring expense."""
     ref = after or date.today()
     if frequency == "weekly":
@@ -284,8 +284,8 @@ def _compute_next_date(frequency: str, day_of_month: int = 1, day_of_week: int |
             days_ahead = 7 if after else 0
         return ref + timedelta(days=days_ahead)
     elif frequency == "yearly":
-        # Use day_of_month to determine the target day each year
-        target_month = ref.month
+        # Use start_month to preserve the original month across years
+        target_month = start_month or ref.month
         target_day = min(day_of_month, 28)
         try:
             next_d = date(ref.year, target_month, target_day)
@@ -322,7 +322,8 @@ def create_recurring_expense(
     """Create a recurring expense template."""
     if data.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
-    next_d = _compute_next_date(data.frequency, data.day_of_month, data.day_of_week)
+    next_d = _compute_next_date(data.frequency, data.day_of_month, data.day_of_week,
+                                start_month=data.start_date.month if data.start_date else None)
 
     rec = RecurringExpense(
         user_id=current_user.id,
@@ -390,7 +391,8 @@ def update_recurring_expense(
         rec.frequency = data.frequency
 
     # Recompute next date
-    rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week)
+    rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week,
+                                       start_month=rec.start_date.month if rec.start_date else None)
     db.commit()
     db.refresh(rec)
     return rec
@@ -430,7 +432,8 @@ def toggle_recurring_expense(
         raise HTTPException(status_code=404, detail="Recurring expense not found")
     rec.is_active = not rec.is_active
     if rec.is_active:
-        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week)
+        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week,
+                                           start_month=rec.start_date.month if rec.start_date else None)
     db.commit()
     db.refresh(rec)
     return rec
@@ -476,7 +479,8 @@ def process_recurring_expenses(
         db.add(expense)
 
         # Advance next_date
-        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week, after=rec.next_date)
+        rec.next_date = _compute_next_date(rec.frequency, rec.day_of_month, rec.day_of_week, after=rec.next_date,
+                                           start_month=rec.start_date.month if rec.start_date else None)
         created += 1
 
     # Batch commit all changes at once for atomicity

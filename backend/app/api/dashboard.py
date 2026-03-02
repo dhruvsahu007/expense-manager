@@ -222,13 +222,17 @@ def couple_dashboard(
     )
 
     shared_total = sum(e.amount for e in expenses)
-    u1_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_1_id)
-    u2_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_2_id)
+    joint_total = sum(e.amount for e in expenses if e.paid_from_joint)
+    u1_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_1_id and not e.paid_from_joint)
+    u2_paid = sum(e.amount for e in expenses if e.paid_by_user_id == couple.user_2_id and not e.paid_from_joint)
 
     # Net balance using split-based shares (consistent with /couple/balance)
     user1_owes_total = 0.0
     user2_owes_total = 0.0
     for exp in expenses:
+        # Joint-paid expenses come from the common account — no individual owes
+        if exp.paid_from_joint:
+            continue
         is_user1_payer = exp.paid_by_user_id == couple.user_1_id
         u1_share, u2_share = calculate_split(
             exp.amount, exp.split_type, exp.split_ratio, is_user1_payer
@@ -328,7 +332,7 @@ def mark_notification_read(
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    notification.is_read = 1
+    notification.is_read = True
     db.commit()
     return {"status": "ok"}
 
@@ -342,9 +346,9 @@ def mark_all_notifications_read(
     db.query(Notification).filter(
         and_(
             Notification.user_id == current_user.id,
-            Notification.is_read == 0,
+            Notification.is_read == False,
         )
-    ).update({Notification.is_read: 1})
+    ).update({Notification.is_read: True})
     db.commit()
     return {"status": "ok"}
 
@@ -360,7 +364,7 @@ def unread_count(
         .filter(
             and_(
                 Notification.user_id == current_user.id,
-                Notification.is_read == 0,
+                Notification.is_read == False,
             )
         )
         .scalar()

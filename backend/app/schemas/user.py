@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     monthly_income: Optional[float] = 0.0
-    salary_date: Optional[int] = 1
+    salary_date: Optional[int] = Field(default=1, ge=1, le=31)
 
 
 class UserLogin(BaseModel):
@@ -19,7 +19,7 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     monthly_income: Optional[float] = None
-    salary_date: Optional[int] = None
+    salary_date: Optional[int] = Field(default=None, ge=1, le=31)
     monthly_budget: Optional[float] = None
 
 

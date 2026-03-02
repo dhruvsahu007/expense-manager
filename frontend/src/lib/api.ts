@@ -136,6 +136,7 @@ class ApiClient {
 
   async exportExpenses(params?: { start_date?: string; end_date?: string }) {
     const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -253,6 +254,17 @@ class ApiClient {
     return this.request<import('@/types').Settlement[]>('/couple/settlements');
   }
 
+  async updateSettlement(id: number, data: import('@/types').SettlementUpdate) {
+    return this.request<import('@/types').Settlement>(`/couple/settlements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSettlement(id: number) {
+    return this.request<null>(`/couple/settlements/${id}`, { method: 'DELETE' });
+  }
+
   // ─── Savings Goals ───────────────────────────────────────────────────────
 
   async createSavingsGoal(data: import('@/types').SavingsGoalCreate) {
@@ -280,6 +292,12 @@ class ApiClient {
     return this.request<import('@/types').SavingsContribution[]>(
       `/couple/goals/${goalId}/contributions`
     );
+  }
+
+  async deleteSavingsContribution(goalId: number, contributionId: number) {
+    return this.request<null>(`/couple/goals/${goalId}/contributions/${contributionId}`, {
+      method: 'DELETE',
+    });
   }
 
   // ─── Joint Account ──────────────────────────────────────────────────────
@@ -318,6 +336,13 @@ class ApiClient {
 
   async deleteJointContribution(id: number) {
     return this.request<null>(`/couple/joint-account/contribution/${id}`, { method: 'DELETE' });
+  }
+
+  async updateJointContribution(id: number, data: import('@/types').JointAccountContributionUpdate) {
+    return this.request<import('@/types').JointAccountContribution>(`/couple/joint-account/contribution/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   // ─── Budgets ─────────────────────────────────────────────────────────────

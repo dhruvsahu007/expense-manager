@@ -39,18 +39,21 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard();
     api.getCategories().then(setCategories).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Check if salary needs to be credited
+  // Check salary only after user is loaded to avoid stale/empty amount
+  useEffect(() => {
+    if (!user) return;
     api.checkSalary()
       .then((check) => {
         if (check.is_salary_day && !check.already_credited) {
-          setSalaryAmount(String(user?.monthly_income || ''));
+          setSalaryAmount(String(user.monthly_income || ''));
           setShowSalaryModal(true);
         }
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   const handleCreditSalary = async () => {
     const amount = parseFloat(salaryAmount);

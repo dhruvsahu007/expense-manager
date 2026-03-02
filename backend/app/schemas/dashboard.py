@@ -84,7 +84,7 @@ class NotificationResponse(BaseModel):
     title: str
     message: str
     notification_type: str
-    is_read: int
+    is_read: bool
     created_at: datetime
 
     class Config:

@@ -24,10 +24,12 @@ from app.schemas.couple import (
     SavingsContributionCreate,
     SavingsContributionResponse,
     SettlementCreate,
+    SettlementUpdate,
     SettlementResponse,
     JointAccountCreate,
     JointAccountResponse,
     JointAccountContributionCreate,
+    JointAccountContributionUpdate,
     JointAccountContributionResponse,
     JointAccountTransactionResponse,
     JointAccountSummary,
@@ -506,6 +508,14 @@ def get_balance(
     user2_owes_total = 0.0
 
     for exp in expenses:
+        # Joint-paid expenses come from the common account — no individual owes
+        if exp.paid_from_joint:
+            if exp.paid_by_user_id == couple.user_1_id:
+                user1_paid += exp.amount
+            else:
+                user2_paid += exp.amount
+            continue
+
         is_user1_payer = exp.paid_by_user_id == couple.user_1_id
         u1_share, u2_share = calculate_split(
             exp.amount, exp.split_type, exp.split_ratio, is_user1_payer
@@ -624,6 +634,64 @@ def list_settlements(
             )
         )
     return result
+
+
+@router.put("/settlements/{settlement_id}", response_model=SettlementResponse)
+def update_settlement(
+    settlement_id: int,
+    data: SettlementUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a settlement."""
+    couple = get_active_couple(current_user.id, db)
+    settlement = db.query(Settlement).filter(
+        and_(Settlement.id == settlement_id, Settlement.couple_id == couple.id)
+    ).first()
+    if not settlement:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+
+    if data.amount is not None:
+        if data.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
+        settlement.amount = data.amount
+    if data.note is not None:
+        settlement.note = data.note
+
+    db.commit()
+    db.refresh(settlement)
+
+    payer = db.query(User).filter(User.id == settlement.paid_by_user_id).first()
+    payee = db.query(User).filter(User.id == settlement.paid_to_user_id).first()
+    return SettlementResponse(
+        id=settlement.id,
+        couple_id=settlement.couple_id,
+        paid_by_user_id=settlement.paid_by_user_id,
+        paid_to_user_id=settlement.paid_to_user_id,
+        paid_by_name=payer.name if payer else None,
+        paid_to_name=payee.name if payee else None,
+        amount=settlement.amount,
+        note=settlement.note,
+        created_at=settlement.created_at,
+    )
+
+
+@router.delete("/settlements/{settlement_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_settlement(
+    settlement_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a settlement."""
+    couple = get_active_couple(current_user.id, db)
+    settlement = db.query(Settlement).filter(
+        and_(Settlement.id == settlement_id, Settlement.couple_id == couple.id)
+    ).first()
+    if not settlement:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+
+    db.delete(settlement)
+    db.commit()
 
 
 # ─── Joint Account ───────────────────────────────────────────────────────────
@@ -866,6 +934,56 @@ def list_transactions_joint(
     ) for t in txns]
 
 
+@router.put("/joint-account/contribution/{contribution_id}", response_model=JointAccountContributionResponse)
+def update_contribution(
+    contribution_id: int,
+    data: JointAccountContributionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a joint account contribution."""
+    couple = get_active_couple(current_user.id, db)
+    joint = db.query(JointAccount).filter(JointAccount.couple_id == couple.id).first()
+    if not joint:
+        raise HTTPException(status_code=404, detail="No joint account found")
+
+    contrib = db.query(JointAccountContribution).filter(
+        and_(
+            JointAccountContribution.id == contribution_id,
+            JointAccountContribution.joint_account_id == joint.id,
+        )
+    ).first()
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Contribution not found")
+
+    # Enforce same 30-day edit window as delete
+    days_old = (date.today() - contrib.date).days
+    if days_old > 30:
+        raise HTTPException(status_code=400, detail="Cannot edit contributions older than 30 days")
+
+    if data.amount is not None:
+        if data.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
+        contrib.amount = data.amount
+    if data.contribution_type is not None:
+        contrib.contribution_type = data.contribution_type
+    if data.note is not None:
+        contrib.note = data.note
+    if data.date is not None:
+        contrib.date = data.date
+
+    db.commit()
+    db.refresh(contrib)
+
+    u = db.query(User).filter(User.id == contrib.user_id).first()
+    return JointAccountContributionResponse(
+        id=contrib.id, joint_account_id=contrib.joint_account_id, user_id=contrib.user_id,
+        user_name=u.name if u else None, amount=contrib.amount,
+        contribution_type=contrib.contribution_type, note=contrib.note, date=contrib.date,
+        created_at=contrib.created_at,
+    )
+
+
 @router.delete("/joint-account/contribution/{contribution_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_contribution(
     contribution_id: int,
@@ -963,7 +1081,7 @@ def contribute_to_goal(
 
     goal.current_amount += contribution.amount
     if goal.current_amount >= goal.target_amount:
-        goal.is_completed = 1
+        goal.is_completed = True
 
     db.commit()
     db.refresh(contrib)
@@ -1015,6 +1133,44 @@ def list_contributions(
             )
         )
     return result
+
+
+@router.delete("/goals/{goal_id}/contributions/{contribution_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_savings_contribution(
+    goal_id: int,
+    contribution_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a savings contribution and subtract from goal's current_amount."""
+    couple = get_active_couple(current_user.id, db)
+    goal = (
+        db.query(SavingsGoal)
+        .filter(and_(SavingsGoal.id == goal_id, SavingsGoal.couple_id == couple.id))
+        .first()
+    )
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    contrib = (
+        db.query(SavingsContribution)
+        .filter(
+            and_(
+                SavingsContribution.id == contribution_id,
+                SavingsContribution.goal_id == goal_id,
+            )
+        )
+        .first()
+    )
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Contribution not found")
+
+    goal.current_amount = max(0.0, goal.current_amount - contrib.amount)
+    if goal.current_amount < goal.target_amount:
+        goal.is_completed = False
+
+    db.delete(contrib)
+    db.commit()
 
 
 def _enrich_goal(goal: SavingsGoal) -> SavingsGoalResponse:

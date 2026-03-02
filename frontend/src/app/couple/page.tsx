@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCategoryIcon } from '@/lib/utils';
 import { PencilIcon, TrashIcon, XMarkIcon } from '@/lib/icons';
-import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary, Category } from '@/types';
+import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary, JointAccountContribution, Category } from '@/types';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -61,7 +61,8 @@ export default function CouplePage() {
   // Contribute form
   const [contributeGoalId, setContributeGoalId] = useState<number | null>(null);
   const [contributeAmount, setContributeAmount] = useState('');
-
+  const [viewContribGoalId, setViewContribGoalId] = useState<number | null>(null);
+  const [goalContributions, setGoalContributions] = useState<import('@/types').SavingsContribution[]>([]);
   // Shared expense edit state
   const [editingExpId, setEditingExpId] = useState<number | null>(null);
   const [editExpAmount, setEditExpAmount] = useState('');
@@ -80,6 +81,18 @@ export default function CouplePage() {
   const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0]);
   const [contribSubmitting, setContribSubmitting] = useState(false);
   const [jointSubTab, setJointSubTab] = useState<'overview' | 'contributions' | 'transactions'>('overview');
+
+  // Settlement edit state
+  const [editingSettleId, setEditingSettleId] = useState<number | null>(null);
+  const [editSettleAmount, setEditSettleAmount] = useState('');
+  const [editSettleNote, setEditSettleNote] = useState('');
+
+  // Joint contribution edit state
+  const [editingContribId, setEditingContribId] = useState<number | null>(null);
+  const [editContribAmount, setEditContribAmount] = useState('');
+  const [editContribType, setEditContribType] = useState('salary');
+  const [editContribNote, setEditContribNote] = useState('');
+  const [editContribDate, setEditContribDate] = useState('');
 
   const loadData = async () => {
     try {
@@ -150,12 +163,16 @@ export default function CouplePage() {
     e.preventDefault();
     setSeSubmitting(true);
     try {
-      const ratio = seSplitType === 'custom' ? `${seMyShare}:${sePartnerShare}` : '50:50';
+      const splitType = sePaidFromJoint ? 'equal' : seSplitType;
+      const isUser1 = user?.id === couple?.user_1_id;
+      const ratio = splitType === 'custom'
+        ? (isUser1 ? `${seMyShare}:${sePartnerShare}` : `${sePartnerShare}:${seMyShare}`)
+        : '50:50';
       await api.createSharedExpense({
         amount: parseFloat(seAmount),
         category: seCategory,
         description: seDesc || undefined,
-        split_type: seSplitType,
+        split_type: splitType,
         split_ratio: ratio,
         date: seDate,
         paid_from_joint: sePaidFromJoint,
@@ -203,7 +220,30 @@ export default function CouplePage() {
       toast.success('Contribution added!');
       setContributeGoalId(null); setContributeAmount('');
       loadData();
+      if (viewContribGoalId === goalId) {
+        api.getContributions(goalId).then(setGoalContributions).catch(() => {});
+      }
     } catch { toast.error('Failed to contribute'); }
+  };
+
+  const handleViewContributions = async (goalId: number) => {
+    if (viewContribGoalId === goalId) { setViewContribGoalId(null); setGoalContributions([]); return; }
+    try {
+      const contribs = await api.getContributions(goalId);
+      setGoalContributions(contribs);
+      setViewContribGoalId(goalId);
+    } catch { toast.error('Failed to load contributions'); }
+  };
+
+  const handleDeleteSavingsContrib = async (goalId: number, contribId: number) => {
+    if (!confirm('Delete this contribution? The amount will be subtracted from the goal.')) return;
+    try {
+      await api.deleteSavingsContribution(goalId, contribId);
+      toast.success('Contribution removed');
+      loadData();
+      const contribs = await api.getContributions(goalId);
+      setGoalContributions(contribs);
+    } catch { toast.error('Failed to delete contribution'); }
   };
 
   // ─── Joint Account handlers ───────────────────────────────────────────────
@@ -245,6 +285,52 @@ export default function CouplePage() {
     catch (err: any) { toast.error(err.message || 'Failed to delete'); }
   };
 
+  const handleEditContribution = (c: JointAccountContribution) => {
+    setEditingContribId(c.id);
+    setEditContribAmount(c.amount.toString());
+    setEditContribType(c.contribution_type);
+    setEditContribNote(c.note || '');
+    setEditContribDate(c.date);
+  };
+
+  const handleSaveContribution = async (id: number) => {
+    try {
+      await api.updateJointContribution(id, {
+        amount: parseFloat(editContribAmount),
+        contribution_type: editContribType,
+        note: editContribNote || undefined,
+        date: editContribDate,
+      });
+      toast.success('Contribution updated');
+      setEditingContribId(null);
+      loadData();
+    } catch { toast.error('Failed to update contribution'); }
+  };
+
+  const handleDeleteSettlement = async (id: number) => {
+    if (!confirm('Delete this settlement?')) return;
+    try { await api.deleteSettlement(id); toast.success('Settlement deleted'); loadData(); }
+    catch { toast.error('Failed to delete settlement'); }
+  };
+
+  const handleEditSettlement = (s: Settlement) => {
+    setEditingSettleId(s.id);
+    setEditSettleAmount(s.amount.toString());
+    setEditSettleNote(s.note || '');
+  };
+
+  const handleSaveSettlement = async (id: number) => {
+    try {
+      await api.updateSettlement(id, {
+        amount: parseFloat(editSettleAmount),
+        note: editSettleNote || undefined,
+      });
+      toast.success('Settlement updated');
+      setEditingSettleId(null);
+      loadData();
+    } catch { toast.error('Failed to update settlement'); }
+  };
+
   const handleDeleteSharedExpense = async (id: number) => {
     if (!confirm('Delete this shared expense?')) return;
     try {
@@ -275,8 +361,9 @@ export default function CouplePage() {
   const handleSaveEditSharedExpense = async () => {
     if (!editingExpId) return;
     try {
+      const isUser1 = user?.id === couple?.user_1_id;
       const ratio = editExpSplitType === 'custom'
-        ? `${editExpMyShare}:${editExpPartnerShare}`
+        ? (isUser1 ? `${editExpMyShare}:${editExpPartnerShare}` : `${editExpPartnerShare}:${editExpMyShare}`)
         : '50:50';
       await api.updateSharedExpense(editingExpId, {
         amount: parseFloat(editExpAmount),
@@ -300,8 +387,8 @@ export default function CouplePage() {
     const netAfter = balance.net_after_settlements ?? balance.net_balance;
     if (Math.abs(netAfter) < 1) return { text: 'All settled up! ✓', owed: 0, youOwe: false };
     const isUser1 = user.id === couple.user_1_id;
-    // net_balance > 0 means user_2 owes user_1
-    const youOwe = isUser1 ? netAfter < 0 : netAfter > 0;
+    // net_balance > 0 means user_1 owes user_2
+    const youOwe = isUser1 ? netAfter > 0 : netAfter < 0;
     return {
       text: youOwe
         ? `You owe ${couple.partner_name} ${formatCurrency(Math.abs(netAfter))}`
@@ -535,48 +622,56 @@ export default function CouplePage() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Split Type</label>
-                      <select value={seSplitType}
-                        onChange={(e) => {
-                          setSeSplitType(e.target.value);
-                          if (e.target.value === 'equal') { setSeMyShare(''); setSePartnerShare(''); }
-                        }}
-                        className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none">
-                        <option value="equal">Split Equally</option>
-                        <option value="custom">Custom Split</option>
-                      </select>
+                  {sePaidFromJoint ? (
+                    <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-4">
+                      <p className="text-sm text-violet-700 dark:text-violet-300">💰 Paid from Joint Account — no split needed</p>
                     </div>
-                    {seSplitType === 'equal' && (
-                      <div className="flex items-end">
-                        <p className="text-sm text-slate-500 pb-3">Each pays {seAmount ? formatCurrency(parseFloat(seAmount) / 2) : '₹0'}</p>
-                      </div>
-                    )}
-                  </div>
-                  {seSplitType === 'custom' && (
-                    <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-                      <p className="text-sm font-medium text-slate-600">How much does each person owe?</p>
+                  ) : (
+                    <>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-medium text-slate-500 mb-1">{user?.name || 'You'} pays (₹)</label>
-                          <input type="number" value={seMyShare}
-                            onChange={(e) => { setSeMyShare(e.target.value); if (seAmount && e.target.value) setSePartnerShare(Math.max(0, parseFloat(seAmount) - parseFloat(e.target.value)).toFixed(0)); }}
-                            required min="0" className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none" placeholder="0" />
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Split Type</label>
+                          <select value={seSplitType}
+                            onChange={(e) => {
+                              setSeSplitType(e.target.value);
+                              if (e.target.value === 'equal') { setSeMyShare(''); setSePartnerShare(''); }
+                            }}
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none">
+                            <option value="equal">Split Equally</option>
+                            <option value="custom">Custom Split</option>
+                          </select>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-500 mb-1">{couple?.partner_name || 'Partner'} pays (₹)</label>
-                          <input type="number" value={sePartnerShare}
-                            onChange={(e) => { setSePartnerShare(e.target.value); if (seAmount && e.target.value) setSeMyShare(Math.max(0, parseFloat(seAmount) - parseFloat(e.target.value)).toFixed(0)); }}
-                            required min="0" className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none" placeholder="0" />
-                        </div>
+                        {seSplitType === 'equal' && (
+                          <div className="flex items-end">
+                            <p className="text-sm text-slate-500 pb-3">Each pays {seAmount ? formatCurrency(parseFloat(seAmount) / 2) : '₹0'}</p>
+                          </div>
+                        )}
                       </div>
-                      {seAmount && seMyShare && sePartnerShare && (
-                        Math.abs(parseFloat(seMyShare) + parseFloat(sePartnerShare) - parseFloat(seAmount)) > 0.01
-                          ? <p className="text-xs text-red-500">⚠️ Shares add up to {formatCurrency(parseFloat(seMyShare) + parseFloat(sePartnerShare))} but total is {formatCurrency(parseFloat(seAmount))}</p>
-                          : <p className="text-xs text-mint-600">✓ Split adds up correctly</p>
+                      {seSplitType === 'custom' && (
+                        <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                          <p className="text-sm font-medium text-slate-600">How much does each person owe?</p>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 mb-1">{user?.name || 'You'} pays (₹)</label>
+                              <input type="number" value={seMyShare}
+                                onChange={(e) => { setSeMyShare(e.target.value); if (seAmount && e.target.value) setSePartnerShare(Math.max(0, parseFloat(seAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                required min="0" className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none" placeholder="0" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-500 mb-1">{couple?.partner_name || 'Partner'} pays (₹)</label>
+                              <input type="number" value={sePartnerShare}
+                                onChange={(e) => { setSePartnerShare(e.target.value); if (seAmount && e.target.value) setSeMyShare(Math.max(0, parseFloat(seAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                required min="0" className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:border-mint-500 outline-none" placeholder="0" />
+                            </div>
+                          </div>
+                          {seAmount && seMyShare && sePartnerShare && (
+                            Math.abs(parseFloat(seMyShare) + parseFloat(sePartnerShare) - parseFloat(seAmount)) > 0.01
+                              ? <p className="text-xs text-red-500">⚠️ Shares add up to {formatCurrency(parseFloat(seMyShare) + parseFloat(sePartnerShare))} but total is {formatCurrency(parseFloat(seAmount))}</p>
+                              : <p className="text-xs text-mint-600">✓ Split adds up correctly</p>
+                          )}
+                        </div>
                       )}
-                    </div>
+                    </>
                   )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -654,30 +749,35 @@ export default function CouplePage() {
                               className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="Optional" />
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-500 mb-1">Split Type</label>
-                          <select value={editExpSplitType}
-                            onChange={(e) => { setEditExpSplitType(e.target.value); if (e.target.value === 'equal') { setEditExpMyShare(''); setEditExpPartnerShare(''); } }}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none">
-                            <option value="equal">Split Equally (50/50)</option>
-                            <option value="custom">Custom Split</option>
-                          </select>
-                        </div>
-                        {editExpSplitType === 'custom' && (
-                          <div className="grid grid-cols-2 gap-3">
+                        {/* Hide split fields when expense was paid from joint account */}
+                        {!exp.paid_from_joint && (
+                          <>
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 mb-1">{user?.name || 'You'} pays (₹)</label>
-                              <input type="number" value={editExpMyShare}
-                                onChange={(e) => { setEditExpMyShare(e.target.value); if (editExpAmount && e.target.value) setEditExpPartnerShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
+                              <label className="block text-xs font-medium text-slate-500 mb-1">Split Type</label>
+                              <select value={editExpSplitType}
+                                onChange={(e) => { setEditExpSplitType(e.target.value); if (e.target.value === 'equal') { setEditExpMyShare(''); setEditExpPartnerShare(''); } }}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none">
+                                <option value="equal">Split Equally (50/50)</option>
+                                <option value="custom">Custom Split</option>
+                              </select>
                             </div>
-                            <div>
-                              <label className="block text-xs font-medium text-slate-500 mb-1">{couple?.partner_name || 'Partner'} pays (₹)</label>
-                              <input type="number" value={editExpPartnerShare}
-                                onChange={(e) => { setEditExpPartnerShare(e.target.value); if (editExpAmount && e.target.value) setEditExpMyShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
-                            </div>
-                          </div>
+                            {editExpSplitType === 'custom' && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">{user?.name || 'You'} pays (₹)</label>
+                                  <input type="number" value={editExpMyShare}
+                                    onChange={(e) => { setEditExpMyShare(e.target.value); if (editExpAmount && e.target.value) setEditExpPartnerShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">{couple?.partner_name || 'Partner'} pays (₹)</label>
+                                  <input type="number" value={editExpPartnerShare}
+                                    onChange={(e) => { setEditExpPartnerShare(e.target.value); if (editExpAmount && e.target.value) setEditExpMyShare(Math.max(0, parseFloat(editExpAmount) - parseFloat(e.target.value)).toFixed(0)); }}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-mint-500 outline-none" placeholder="0" />
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                         <div className="flex gap-2">
                           <button onClick={handleSaveEditSharedExpense} className="bg-mint-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mint-700">
@@ -797,20 +897,51 @@ export default function CouplePage() {
               ) : (
                 <div className="space-y-2">
                   {settlements.map((s) => (
-                    <div key={s.id} className="bg-white rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">💸</span>
-                        <div>
-                          <p className="font-medium text-slate-800">
-                            {s.paid_by_user_id === user?.id ? 'You' : couple.partner_name} paid {s.paid_to_user_id === user?.id ? 'you' : couple.partner_name}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {s.note && <span>{s.note} · </span>}
-                            {new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </p>
+                    <div key={s.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm">
+                      {editingSettleId === s.id ? (
+                        <div className="space-y-3">
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-slate-500 mb-1">Amount (₹)</label>
+                              <input type="number" value={editSettleAmount} onChange={(e) => setEditSettleAmount(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm" min="1" />
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-slate-500 mb-1">Note</label>
+                              <input type="text" value={editSettleNote} onChange={(e) => setEditSettleNote(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm" placeholder="Optional" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => setEditingSettleId(null)} className="px-3 py-1.5 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
+                            <button onClick={() => handleSaveSettlement(s.id)} className="px-3 py-1.5 rounded-lg text-sm bg-mint-600 text-white hover:bg-mint-700">Save</button>
+                          </div>
                         </div>
-                      </div>
-                      <span className="font-semibold text-green-600">{formatCurrency(s.amount)}</span>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">💸</span>
+                            <div>
+                              <p className="font-medium text-slate-800 dark:text-white">
+                                {s.paid_by_user_id === user?.id ? 'You' : couple.partner_name} paid {s.paid_to_user_id === user?.id ? 'you' : couple.partner_name}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {s.note && <span>{s.note} · </span>}
+                                {new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(s.amount)}</span>
+                            <button onClick={() => handleEditSettlement(s)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition" title="Edit">
+                              <PencilIcon size={15} />
+                            </button>
+                            <button onClick={() => handleDeleteSettlement(s.id)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition" title="Delete">
+                              <TrashIcon size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -899,6 +1030,28 @@ export default function CouplePage() {
                         ) : (
                           <button onClick={() => setContributeGoalId(goal.id)} className="text-mint-600 text-sm font-medium hover:underline">+ Contribute</button>
                         )}
+                      </div>
+                    )}
+                    <button onClick={() => handleViewContributions(goal.id)}
+                      className="text-xs text-slate-400 hover:text-slate-600 mt-2">
+                      {viewContribGoalId === goal.id ? '▲ Hide contributions' : '▼ View contributions'}
+                    </button>
+                    {viewContribGoalId === goal.id && (
+                      <div className="mt-3 space-y-2 border-t pt-3">
+                        {goalContributions.length === 0 ? (
+                          <p className="text-xs text-slate-400">No contributions yet</p>
+                        ) : goalContributions.map(c => (
+                          <div key={c.id} className="flex items-center justify-between text-sm">
+                            <div>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{c.user_name}</span>
+                              <span className="text-slate-400 ml-2">{formatCurrency(c.amount)}</span>
+                              <span className="text-slate-300 ml-2 text-xs">{formatDate(c.created_at)}</span>
+                            </div>
+                            <button onClick={() => handleDeleteSavingsContrib(goal.id, c.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                              title="Delete contribution"><TrashIcon size={14} /></button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1127,23 +1280,61 @@ export default function CouplePage() {
                       <div className="text-center py-8 text-slate-400"><p className="text-3xl mb-2">📥</p><p>No contributions yet</p></div>
                     ) : (
                       jointSummary.recent_contributions.map(c => (
-                        <div key={c.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between group">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">📥</span>
-                            <div>
-                              <p className="font-medium text-slate-800 dark:text-white">{c.user_name}</p>
-                              <p className="text-xs text-slate-400">
-                                {c.contribution_type.charAt(0).toUpperCase() + c.contribution_type.slice(1)}
-                                {c.note && ` · ${c.note}`} · {formatDate(c.date)}
-                              </p>
+                        <div key={c.id} className="bg-white dark:bg-slate-800 rounded-xl px-4 py-3 shadow-sm">
+                          {editingContribId === c.id ? (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">Amount (₹)</label>
+                                  <input type="number" value={editContribAmount} onChange={(e) => setEditContribAmount(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm" min="1" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                                  <select value={editContribType} onChange={(e) => setEditContribType(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm">
+                                    {CONTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                                  <input type="date" value={editContribDate} onChange={(e) => setEditContribDate(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-slate-500 mb-1">Note</label>
+                                  <input type="text" value={editContribNote} onChange={(e) => setEditContribNote(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-mint-500 outline-none text-sm" placeholder="Optional" />
+                                </div>
+                              </div>
+                              <div className="flex gap-2 justify-end">
+                                <button onClick={() => setEditingContribId(null)} className="px-3 py-1.5 rounded-lg text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
+                                <button onClick={() => handleSaveContribution(c.id)} className="px-3 py-1.5 rounded-lg text-sm bg-mint-600 text-white hover:bg-mint-700">Save</button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-green-600 dark:text-green-400">+{formatCurrency(c.amount)}</span>
-                            <button onClick={() => handleDeleteContribution(c.id)}
-                              className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
-                              title="Delete"><TrashIcon size={15} /></button>
-                          </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">📥</span>
+                                <div>
+                                  <p className="font-medium text-slate-800 dark:text-white">{c.user_name}</p>
+                                  <p className="text-xs text-slate-400">
+                                    {c.contribution_type.charAt(0).toUpperCase() + c.contribution_type.slice(1)}
+                                    {c.note && ` · ${c.note}`} · {formatDate(c.date)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-green-600 dark:text-green-400">+{formatCurrency(c.amount)}</span>
+                                <button onClick={() => handleEditContribution(c)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition" title="Edit">
+                                  <PencilIcon size={15} />
+                                </button>
+                                <button onClick={() => handleDeleteContribution(c.id)}
+                                  className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                                  title="Delete"><TrashIcon size={15} /></button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}

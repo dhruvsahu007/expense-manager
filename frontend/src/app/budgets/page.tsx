@@ -17,7 +17,7 @@ export default function BudgetsPage() {
   const categoryNames = categories.map(c => c.name);
   const catIcon = (name: string) => getCategoryIcon(name, categories);
 
-  const [category, setCategory] = useState('Food');
+  const [category, setCategory] = useState('');
   const [limit, setLimit] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
