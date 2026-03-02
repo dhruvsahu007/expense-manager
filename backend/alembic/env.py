@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
@@ -7,6 +8,11 @@ from app.core.database import Base
 from app.models import user, expense, couple, budget  # noqa
 
 config = context.config
+
+# Override sqlalchemy.url with DATABASE_URL env var if available (for Docker)
+if os.environ.get("DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
