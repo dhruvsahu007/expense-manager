@@ -1,7 +1,9 @@
-from typing import List
+from typing import List, Optional
 from datetime import date, datetime, timezone
+import io, csv
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func, extract
 
@@ -374,17 +376,39 @@ def create_shared_expense(
 
 @router.get("/expenses", response_model=List[SharedExpenseResponse])
 def list_shared_expenses(
+    category: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    search: Optional[str] = Query(None),
+    min_amount: Optional[float] = Query(None),
+    max_amount: Optional[float] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List all shared expenses for the couple."""
+    """List all shared expenses for the couple with optional filters."""
     couple = get_active_couple(current_user.id, db)
-    expenses = (
-        db.query(SharedExpense)
-        .filter(SharedExpense.couple_id == couple.id)
-        .order_by(SharedExpense.date.desc())
-        .all()
-    )
+    query = db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id)
+
+    if category:
+        query = query.filter(SharedExpense.category == category)
+    if start_date:
+        query = query.filter(SharedExpense.date >= start_date)
+    if end_date:
+        query = query.filter(SharedExpense.date <= end_date)
+    if search:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(
+            or_(
+                SharedExpense.description.ilike(f"%{escaped}%"),
+                SharedExpense.category.ilike(f"%{escaped}%"),
+            )
+        )
+    if min_amount is not None:
+        query = query.filter(SharedExpense.amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(SharedExpense.amount <= max_amount)
+
+    expenses = query.order_by(SharedExpense.date.desc()).all()
 
     result = []
     for exp in expenses:
@@ -406,6 +430,46 @@ def list_shared_expenses(
             )
         )
     return result
+
+
+@router.get("/expenses/export")
+def export_shared_expenses(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export shared expenses as CSV."""
+    couple = get_active_couple(current_user.id, db)
+    query = db.query(SharedExpense).filter(SharedExpense.couple_id == couple.id)
+    if start_date:
+        query = query.filter(SharedExpense.date >= start_date)
+    if end_date:
+        query = query.filter(SharedExpense.date <= end_date)
+    expenses = query.order_by(SharedExpense.date.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Category", "Amount", "Paid By", "Split Type", "Split Ratio", "Description", "Paid From Joint"])
+    for exp in expenses:
+        payer = db.query(User).filter(User.id == exp.paid_by_user_id).first()
+        writer.writerow([
+            exp.date.isoformat(),
+            exp.category,
+            exp.amount,
+            payer.name if payer else "",
+            exp.split_type,
+            exp.split_ratio,
+            exp.description or "",
+            "Yes" if exp.paid_from_joint else "No",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=shared_expenses.csv"},
+    )
 
 
 @router.put("/expenses/{expense_id}", response_model=SharedExpenseResponse)

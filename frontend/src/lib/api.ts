@@ -222,8 +222,31 @@ class ApiClient {
     });
   }
 
-  async getSharedExpenses() {
-    return this.request<import('@/types').SharedExpense[]>('/couple/expenses');
+  async getSharedExpenses(params?: Record<string, string | number | undefined>) {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') searchParams.append(key, String(value));
+      });
+    }
+    const query = searchParams.toString();
+    return this.request<import('@/types').SharedExpense[]>(`/couple/expenses${query ? `?${query}` : ''}`);
+  }
+
+  async exportSharedExpenses(params?: { start_date?: string; end_date?: string }) {
+    const token = this.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) searchParams.append(key, String(value));
+      });
+    }
+    const query = searchParams.toString();
+    const response = await fetch(`${this.baseUrl}/couple/expenses/export${query ? `?${query}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.blob();
   }
 
   async updateSharedExpense(id: number, data: import('@/types').SharedExpenseUpdate) {

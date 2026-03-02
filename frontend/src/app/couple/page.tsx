@@ -4,12 +4,20 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getCategoryIcon } from '@/lib/utils';
-import { PencilIcon, TrashIcon, XMarkIcon } from '@/lib/icons';
+import { PencilIcon, TrashIcon, XMarkIcon, FunnelIcon, ArrowsUpDownIcon, MagnifyingGlassIcon, CheckIcon, ArrowDownTrayIcon } from '@/lib/icons';
 import { Couple, SharedExpense, BalanceSummary, SavingsGoal, Settlement, JointAccountSummary, JointAccountContribution, Category } from '@/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 
 const CONTRIBUTION_TYPES = ['salary', 'bonus', 'savings', 'other'];
+
+type SortOption = 'recent' | 'oldest' | 'high' | 'low';
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'recent', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'high', label: 'Amount: High to Low' },
+  { value: 'low', label: 'Amount: Low to High' },
+];
 
 export default function CouplePage() {
   const { user } = useAuth();
@@ -94,13 +102,56 @@ export default function CouplePage() {
   const [editContribNote, setEditContribNote] = useState('');
   const [editContribDate, setEditContribDate] = useState('');
 
+  // Shared expense filter/sort state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  const catRef = useRef<HTMLDivElement>(null);
+
+  const loadSharedExpenses = async () => {
+    if (!couple || couple.status !== 'active') return;
+    const params: Record<string, string | number | undefined> = {};
+    if (selectedCategories.length === 1) params.category = selectedCategories[0];
+    if (searchQuery) params.search = searchQuery;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (minAmount) params.min_amount = parseFloat(minAmount);
+    if (maxAmount) params.max_amount = parseFloat(maxAmount);
+    try {
+      const data = await api.getSharedExpenses(params);
+      let filtered = data;
+      if (selectedCategories.length > 1) {
+        filtered = data.filter(e => selectedCategories.includes(e.category));
+      }
+      setSharedExpenses(filtered);
+    } catch {}
+  };
+
   const loadData = async () => {
     try {
       const coupleData = await api.getCoupleStatus();
       setCouple(coupleData);
       if (coupleData.status === 'active') {
+        const params: Record<string, string | number | undefined> = {};
+        if (selectedCategories.length === 1) params.category = selectedCategories[0];
+        if (searchQuery) params.search = searchQuery;
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        if (minAmount) params.min_amount = parseFloat(minAmount);
+        if (maxAmount) params.max_amount = parseFloat(maxAmount);
         const [expenses, bal, g, s] = await Promise.all([
-          api.getSharedExpenses(),
+          api.getSharedExpenses(params).then(data => {
+            if (selectedCategories.length > 1) return data.filter(e => selectedCategories.includes(e.category));
+            return data;
+          }),
           api.getBalance(),
           api.getSavingsGoals(),
           api.getSettlements().catch(() => []),
@@ -124,7 +175,54 @@ export default function CouplePage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); api.getCategories().then(setCategories).catch(() => {}); }, []);
+  useEffect(() => { loadData(); api.getCategories().then(setCategories).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close sort/category dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setShowSortMenu(false);
+      if (catRef.current && !catRef.current.contains(e.target as Node)) setShowCategoryFilter(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Debounced reload when filters change
+  useEffect(() => {
+    const timer = setTimeout(() => loadSharedExpenses(), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, startDate, endDate, minAmount, maxAmount, selectedCategories.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sortedExpenses = [...sharedExpenses].sort((a, b) => {
+    switch (sortBy) {
+      case 'recent': return new Date(b.date).getTime() - new Date(a.date).getTime();
+      case 'oldest': return new Date(a.date).getTime() - new Date(b.date).getTime();
+      case 'high': return b.amount - a.amount;
+      case 'low': return a.amount - b.amount;
+      default: return 0;
+    }
+  });
+
+  const toggleCategoryFilter = (cat: string) => {
+    setSelectedCategories((prev) => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  };
+
+  const clearAllFilters = () => {
+    setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount('');
+    setSearchQuery(''); setSelectedCategories([]); setSortBy('recent');
+  };
+
+  const hasActiveFilters = searchQuery || startDate || endDate || minAmount || maxAmount || selectedCategories.length > 0;
+
+  const handleExportShared = async () => {
+    try {
+      const blob = await api.exportSharedExpenses({ start_date: startDate || undefined, end_date: endDate || undefined });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = 'shared_expenses_' + new Date().toISOString().split('T')[0] + '.csv';
+      a.click(); URL.revokeObjectURL(url); toast.success('Exported successfully!');
+    } catch { toast.error('Export failed'); }
+  };
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -604,6 +702,131 @@ export default function CouplePage() {
         {/* ─── Shared Expenses Tab ─── */}
         {tab === 'expenses' && (
           <>
+            {/* Header with total and export */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Total: {formatCurrency(sharedExpenses.reduce((s, e) => s + e.amount, 0))} &middot; {sharedExpenses.length} entries</p>
+              </div>
+              <button onClick={handleExportShared}
+                className="hidden md:flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                <ArrowDownTrayIcon size={16} /> Export CSV
+              </button>
+            </div>
+
+            {/* Search / Filter / Sort toolbar */}
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search shared expenses..."
+                    className="w-full px-4 py-2.5 pl-10 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-mint-500 focus:ring-2 focus:ring-mint-200 outline-none text-sm" />
+                  <span className="absolute left-3 top-3 text-slate-400"><MagnifyingGlassIcon size={16} /></span>
+                </div>
+                <div className="relative" ref={catRef}>
+                  <button onClick={() => { setShowCategoryFilter(!showCategoryFilter); setShowSortMenu(false); }}
+                    className={'flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition ' + (selectedCategories.length > 0 ? 'bg-mint-50 dark:bg-mint-900/30 border-mint-300 dark:border-mint-700 text-mint-700 dark:text-mint-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300')}>
+                    <FunnelIcon size={14} />
+                    <span className="hidden sm:inline">Category</span>
+                    {selectedCategories.length > 0 && <span className="bg-mint-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{selectedCategories.length}</span>}
+                  </button>
+                  {showCategoryFilter && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 py-2 animate-slide-up">
+                      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Filter by Category</span>
+                        {selectedCategories.length > 0 && <button onClick={() => setSelectedCategories([])} className="text-xs text-red-500 hover:text-red-600">Clear</button>}
+                      </div>
+                      {categoryNames.map((cat) => (
+                        <button key={cat} onClick={() => toggleCategoryFilter(cat)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition text-left">
+                          <span className={'w-4 h-4 rounded border flex items-center justify-center text-white ' + (selectedCategories.includes(cat) ? 'bg-mint-600 border-mint-600' : 'border-slate-300 dark:border-slate-600')}>
+                            {selectedCategories.includes(cat) && <CheckIcon size={10} />}
+                          </span>
+                          <span>{catIcon(cat)}</span>
+                          <span className="text-slate-700 dark:text-slate-300">{cat}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="relative" ref={sortRef}>
+                  <button onClick={() => { setShowSortMenu(!showSortMenu); setShowCategoryFilter(false); }}
+                    className={'flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition ' + (sortBy !== 'recent' ? 'bg-mint-50 dark:bg-mint-900/30 border-mint-300 dark:border-mint-700 text-mint-700 dark:text-mint-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300')}>
+                    <ArrowsUpDownIcon size={14} />
+                    <span className="hidden sm:inline">Sort</span>
+                  </button>
+                  {showSortMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 py-2 animate-slide-up">
+                      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sort By</span>
+                      </div>
+                      {SORT_OPTIONS.map((opt) => (
+                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSortMenu(false); }}
+                          className={'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition text-left ' + (sortBy === opt.value ? 'text-mint-600 dark:text-mint-400 font-medium' : 'text-slate-700 dark:text-slate-300')}>
+                          {sortBy === opt.value ? <CheckIcon size={14} className="text-mint-600" /> : <span className="w-3.5" />}
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => setShowFilters(!showFilters)}
+                  className={'flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition ' + ((showFilters || startDate || endDate || minAmount || maxAmount) ? 'bg-mint-50 dark:bg-mint-900/30 border-mint-300 dark:border-mint-700 text-mint-700 dark:text-mint-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300')}>
+                  ⚙ <span className="hidden sm:inline">More</span>
+                </button>
+              </div>
+
+              {showFilters && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm animate-slide-up space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">From</label>
+                      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm focus:border-mint-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">To</label>
+                      <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                        className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm focus:border-mint-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Min Amount</label>
+                      <input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="0" min="0"
+                        className="w-28 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm focus:border-mint-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Max Amount</label>
+                      <input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="No limit" min="0"
+                        className="w-28 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white text-sm focus:border-mint-500 outline-none" />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <button onClick={clearAllFilters} className="px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition font-medium flex items-center gap-1">
+                        <XMarkIcon size={14} /> Clear all
+                      </button>
+                      <button onClick={handleExportShared} className="md:hidden px-3 py-2 rounded-lg text-sm text-mint-600 font-medium flex items-center gap-1">
+                        <ArrowDownTrayIcon size={14} /> Export
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {hasActiveFilters && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">Active:</span>
+                  {selectedCategories.map(cat => (
+                    <span key={cat} className="inline-flex items-center gap-1 bg-mint-50 dark:bg-mint-900/30 text-mint-700 dark:text-mint-400 text-xs px-2 py-1 rounded-full">
+                      {catIcon(cat)} {cat}
+                      <button onClick={() => toggleCategoryFilter(cat)} className="hover:text-red-500"><XMarkIcon size={10} /></button>
+                    </span>
+                  ))}
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs px-2 py-1 rounded-full">
+                      &quot;{searchQuery}&quot;
+                      <button onClick={() => setSearchQuery('')} className="hover:text-red-500"><XMarkIcon size={10} /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
             {showExpenseForm && (
               <div className="bg-white rounded-xl p-6 shadow-sm animate-slide-up">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Add Shared Expense</h3>
@@ -711,14 +934,14 @@ export default function CouplePage() {
               </div>
             )}
 
-            {sharedExpenses.length === 0 ? (
+            {sortedExpenses.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <p className="text-4xl mb-3">🧾</p>
-                <p>No shared expenses yet</p>
+                <p>{hasActiveFilters ? 'No matching expenses found' : 'No shared expenses yet'}</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {sharedExpenses.map((exp) => (
+                {sortedExpenses.map((exp) => (
                   <div key={exp.id} className="bg-white rounded-xl px-4 py-3 shadow-sm animate-fade-in group">
                     {editingExpId === exp.id ? (
                       /* ─── Inline Edit Mode ─── */
