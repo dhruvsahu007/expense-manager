@@ -596,7 +596,7 @@ export default function CouplePage() {
 
         {/* ─── Joint Account Widget (if active) ─── */}
         {jointSummary && jointSummary.account.is_active && (
-          <div className="rounded-xl p-5 text-white" style={{ background: '#e7c1ff' }}>
+          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-5 text-white">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">💰</span>
@@ -643,7 +643,7 @@ export default function CouplePage() {
 
         {/* Balance Card */}
         {balance && (
-          <div className="rounded-xl p-5 text-white" style={{ background: '#9aef9a' }}>
+          <div className="bg-gradient-to-r from-mint-500 to-emerald-600 rounded-xl p-5 text-white">
             <p className="text-sm opacity-80">Total Shared Expenses</p>
             <p className="text-3xl font-bold mt-1">{formatCurrency(balance.total_shared + (balance.total_joint || 0))}</p>
             <div className="grid grid-cols-2 gap-4 mt-4">
