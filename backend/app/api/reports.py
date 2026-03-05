@@ -6,14 +6,16 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, extract, func
+from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.budget import Budget
 from app.models.expense import Expense
+from app.models.couple import Couple, SharedExpense
 from app.models.user import User
+from app.api.couple import calculate_split
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -72,7 +74,27 @@ def get_reports(
         start_year -= 1
     start_month = date(start_year, start_month_num, 1)
 
-    # Fetch all expenses in window
+    # ── Helper: get couple & compute user's share ────────────────────
+    couple = (
+        db.query(Couple)
+        .filter(
+            and_(
+                Couple.status == "active",
+                or_(Couple.user_1_id == current_user.id, Couple.user_2_id == current_user.id),
+            )
+        )
+        .first()
+    )
+    is_user1 = couple and couple.user_1_id == current_user.id
+
+    def _user_share(exp: SharedExpense) -> float:
+        u1_share, u2_share = calculate_split(
+            exp.amount, exp.split_type, exp.split_ratio,
+            exp.paid_by_user_id == couple.user_1_id if couple else True,
+        )
+        return u1_share if is_user1 else u2_share
+
+    # Fetch all personal expenses in window
     expenses = (
         db.query(Expense)
         .filter(
@@ -85,11 +107,35 @@ def get_reports(
         .all()
     )
 
+    # Fetch all shared expenses in window (user's share)
+    shared_expenses: list[SharedExpense] = []
+    if couple:
+        shared_expenses = (
+            db.query(SharedExpense)
+            .filter(
+                and_(
+                    SharedExpense.couple_id == couple.id,
+                    SharedExpense.date >= start_month,
+                )
+            )
+            .order_by(SharedExpense.date)
+            .all()
+        )
+
     # ── Bucket by month ──────────────────────────────────────────────
-    month_buckets: dict[str, list[Expense]] = {}
+    # Use a simple dict of {month_key: {category: amount}}
+    month_cat_totals: dict[str, dict[str, float]] = {}
+
     for e in expenses:
         key = e.date.strftime("%Y-%m")
-        month_buckets.setdefault(key, []).append(e)
+        month_cat_totals.setdefault(key, {})
+        month_cat_totals[key][e.category] = month_cat_totals[key].get(e.category, 0) + e.amount
+
+    for e in shared_expenses:
+        key = e.date.strftime("%Y-%m")
+        share = _user_share(e)
+        month_cat_totals.setdefault(key, {})
+        month_cat_totals[key][e.category] = month_cat_totals[key].get(e.category, 0) + share
 
     # Monthly breakdown + spending trends
     monthly_breakdown: list[MonthlyBreakdown] = []
@@ -109,13 +155,8 @@ def get_reports(
         cur = date(y, m, 1)
 
     for month_key in all_months:
-        bucket = month_buckets.get(month_key, [])
-        total = sum(e.amount for e in bucket)
-
-        # Category breakdown for this month
-        cat_totals: dict[str, float] = {}
-        for e in bucket:
-            cat_totals[e.category] = cat_totals.get(e.category, 0) + e.amount
+        cat_totals = month_cat_totals.get(month_key, {})
+        total = sum(cat_totals.values())
 
         cats = [
             CategoryAmount(
@@ -137,10 +178,7 @@ def get_reports(
     )
 
     current_month_key = today.strftime("%Y-%m")
-    current_bucket = month_buckets.get(current_month_key, [])
-    current_cat_totals: dict[str, float] = {}
-    for e in current_bucket:
-        current_cat_totals[e.category] = current_cat_totals.get(e.category, 0) + e.amount
+    current_cat_totals = month_cat_totals.get(current_month_key, {})
 
     budget_variance: list[BudgetVarianceItem] = []
     for b in budgets:

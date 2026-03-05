@@ -33,8 +33,45 @@ def individual_dashboard(
     """Get individual analytics dashboard."""
     today = date.today()
 
-    # Current month expenses
-    month_expenses = (
+    # ── Helper: get the user's couple (if any) for shared expense inclusion ──
+    couple = (
+        db.query(Couple)
+        .filter(
+            and_(
+                Couple.status == "active",
+                or_(Couple.user_1_id == current_user.id, Couple.user_2_id == current_user.id),
+            )
+        )
+        .first()
+    )
+    is_user1 = couple and couple.user_1_id == current_user.id
+
+    def _user_share_of_shared(exp: SharedExpense) -> float:
+        """Return the current user's share of a shared expense."""
+        u1_share, u2_share = calculate_split(
+            exp.amount, exp.split_type, exp.split_ratio,
+            exp.paid_by_user_id == couple.user_1_id if couple else True,
+        )
+        return u1_share if is_user1 else u2_share
+
+    # ── Fetch shared expenses for a given month/year ──
+    def _shared_expenses_for_month(m: int, y: int) -> list:
+        if not couple:
+            return []
+        return (
+            db.query(SharedExpense)
+            .filter(
+                and_(
+                    SharedExpense.couple_id == couple.id,
+                    extract("month", SharedExpense.date) == m,
+                    extract("year", SharedExpense.date) == y,
+                )
+            )
+            .all()
+        )
+
+    # Current month personal expenses
+    personal_month = (
         db.query(func.coalesce(func.sum(Expense.amount), 0))
         .filter(
             and_(
@@ -46,6 +83,12 @@ def individual_dashboard(
         .scalar()
     )
 
+    # Current month shared expenses (user's share)
+    current_shared = _shared_expenses_for_month(today.month, today.year)
+    shared_month = sum(_user_share_of_shared(e) for e in current_shared)
+
+    month_expenses = personal_month + shared_month
+
     # Previous month expenses
     prev_month = today.month - 1
     prev_year = today.year
@@ -53,7 +96,7 @@ def individual_dashboard(
         prev_month = 12
         prev_year -= 1
 
-    prev_month_expenses = (
+    prev_personal = (
         db.query(func.coalesce(func.sum(Expense.amount), 0))
         .filter(
             and_(
@@ -64,6 +107,9 @@ def individual_dashboard(
         )
         .scalar()
     )
+    prev_shared = _shared_expenses_for_month(prev_month, prev_year)
+    prev_shared_total = sum(_user_share_of_shared(e) for e in prev_shared)
+    prev_month_expenses = prev_personal + prev_shared_total
 
     mom_change = 0.0
     if prev_month_expenses > 0:
@@ -75,7 +121,7 @@ def individual_dashboard(
     days_elapsed = today.day
     burn_rate = month_expenses / days_elapsed if days_elapsed > 0 else 0
 
-    # Category breakdown for current month
+    # Category breakdown for current month (personal + shared)
     category_data = (
         db.query(Expense.category, func.sum(Expense.amount).label("total"))
         .filter(
@@ -89,14 +135,23 @@ def individual_dashboard(
         .all()
     )
 
-    category_breakdown = []
+    cat_map: dict[str, float] = {}
     for cat, total in category_data:
+        cat_map[cat] = cat_map.get(cat, 0) + total
+
+    # Add user's share of shared expenses to category breakdown
+    for e in current_shared:
+        share = _user_share_of_shared(e)
+        cat_map[e.category] = cat_map.get(e.category, 0) + share
+
+    category_breakdown = []
+    for cat, total in cat_map.items():
         pct = (total / month_expenses * 100) if month_expenses > 0 else 0
         category_breakdown.append(
             CategoryBreakdown(category=cat, total=round(total, 2), percentage=round(pct, 1))
         )
 
-    # Monthly trend (last 6 months)
+    # Monthly trend (last 6 months) — personal + shared
     monthly_trend = []
     for i in range(5, -1, -1):
         m = today.month - i
@@ -105,7 +160,7 @@ def individual_dashboard(
             m += 12
             y -= 1
 
-        total = (
+        personal_total = (
             db.query(func.coalesce(func.sum(Expense.amount), 0))
             .filter(
                 and_(
@@ -116,14 +171,17 @@ def individual_dashboard(
             )
             .scalar()
         )
+        shared_exps = _shared_expenses_for_month(m, y)
+        shared_total = sum(_user_share_of_shared(e) for e in shared_exps)
+        total = personal_total + shared_total
         month_label = date(y, m, 1).strftime("%b %Y")
         monthly_trend.append(MonthlyTrend(month=month_label, total=round(total, 2)))
 
-    # Budget overview
+    # Budget overview — personal + shared spend per category
     budgets = db.query(Budget).filter(Budget.user_id == current_user.id).all()
     budget_overview = []
     for b in budgets:
-        cat_spend = (
+        personal_cat = (
             db.query(func.coalesce(func.sum(Expense.amount), 0))
             .filter(
                 and_(
@@ -135,6 +193,10 @@ def individual_dashboard(
             )
             .scalar()
         )
+        shared_cat = sum(
+            _user_share_of_shared(e) for e in current_shared if e.category == b.category
+        )
+        cat_spend = personal_cat + shared_cat
         pct = (cat_spend / b.monthly_limit * 100) if b.monthly_limit > 0 else 0
         status_str = "ok"
         if pct >= 100:
